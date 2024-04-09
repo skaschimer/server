@@ -10,13 +10,13 @@ declare(strict_types=1);
 namespace OCA\Files_External\Lib\Storage;
 
 use Icewind\Streams\File;
-use phpseclib\Net\SSH2;
+use phpseclib3\Net\SSH2;
 
 class SFTPWriteStream implements File {
 	/** @var resource */
 	public $context;
 
-	/** @var \phpseclib\Net\SFTP */
+	/** @var \phpseclib3\Net\SFTP */
 	private $sftp;
 
 	/** @var string */
@@ -54,7 +54,7 @@ class SFTPWriteStream implements File {
 		} else {
 			throw new \BadMethodCallException('Invalid context, "' . $name . '" options not set');
 		}
-		if (isset($context['session']) && $context['session'] instanceof \phpseclib\Net\SFTP) {
+		if (isset($context['session']) && $context['session'] instanceof \phpseclib3\Net\SFTP) {
 			$this->sftp = $context['session'];
 		} else {
 			throw new \BadMethodCallException('Invalid context, session not set');
@@ -74,7 +74,7 @@ class SFTPWriteStream implements File {
 			return false;
 		}
 
-		$remote_file = $this->sftp->_realpath($path);
+		$remote_file = $this->sftp->realpath($path);
 
 		$this->path = $remote_file;
 		if ($remote_file === false) {
