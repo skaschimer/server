@@ -54,12 +54,12 @@ Cypress.Commands.add('enableUser', (user: User, enable = true) => {
  */
 Cypress.Commands.add('uploadFile', (user, fixture = 'image.jpg', mimeType = 'image/jpeg', target = `/${fixture}`) => {
 	// get fixture
-	return cy.fixture(fixture, 'base64').then(async file => {
-		// convert the base64 string to a blob
-		const blob = Cypress.Blob.base64StringToBlob(file, mimeType)
-
-		cy.uploadContent(user, blob, mimeType, target)
-	})
+	return cy.fixture(fixture, 'base64')
+		.then((file) => (
+			// convert the base64 string to a blob
+			Cypress.Blob.base64StringToBlob(file, mimeType)
+		))
+		.then((blob) => cy.uploadContent(user, blob, mimeType, target))
 })
 
 Cypress.Commands.add('setFileAsFavorite', (user: User, target: string, favorite = true) => {
@@ -98,7 +98,7 @@ Cypress.Commands.add('setFileAsFavorite', (user: User, target: string, favorite 
 
 Cypress.Commands.add('mkdir', (user: User, target: string) => {
 	// eslint-disable-next-line cypress/unsafe-to-chain-command
-	cy.clearCookies()
+	return cy.clearCookies()
 		.then(async () => {
 			try {
 				const rootPath = `${Cypress.env('baseUrl')}/remote.php/dav/files/${encodeURIComponent(user.userId)}`
@@ -112,9 +112,33 @@ Cypress.Commands.add('mkdir', (user: User, target: string) => {
 					},
 				})
 				cy.log(`Created directory ${target}`, response)
+				return response
 			} catch (error) {
 				cy.log('error', error)
 				throw new Error('Unable to create directory')
+			}
+		})
+})
+
+Cypress.Commands.add('rm', (user: User, target: string) => {
+	// eslint-disable-next-line cypress/unsafe-to-chain-command
+	cy.clearCookies()
+		.then(async () => {
+			try {
+				const rootPath = `${Cypress.env('baseUrl')}/remote.php/dav/files/${encodeURIComponent(user.userId)}`
+				const filePath = target.split('/').map(encodeURIComponent).join('/')
+				const response = await axios({
+					url: `${rootPath}${filePath}`,
+					method: 'DELETE',
+					auth: {
+						username: user.userId,
+						password: user.password,
+					},
+				})
+				cy.log(`delete file or directory ${target}`, response)
+			} catch (error) {
+				cy.log('error', error)
+				throw new Error('Unable to delete file or directory')
 			}
 		})
 })

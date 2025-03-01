@@ -105,9 +105,23 @@
 				role="region">
 				<section>
 					<NcInputField v-if="isPublicShare"
+						class="sharingTabDetailsView__label"
 						autocomplete="off"
 						:label="t('files_sharing', 'Share label')"
 						:value.sync="share.label" />
+					<NcInputField v-if="config.allowCustomTokens && isPublicShare && !isNewShare"
+						autocomplete="off"
+						:label="t('files_sharing', 'Share link token')"
+						:helper-text="t('files_sharing', 'Set the public share link token to something easy to remember or generate a new token. It is not recommended to use a guessable token for shares which contain sensitive information.')"
+						show-trailing-button
+						:trailing-button-label="loadingToken ? t('files_sharing', 'Generating…') : t('files_sharing', 'Generate new token')"
+						:value.sync="share.token"
+						@trailing-button-click="generateNewToken">
+						<template #trailing-button-icon>
+							<NcLoadingIcon v-if="loadingToken" />
+							<Refresh v-else :size="20" />
+						</template>
+					</NcInputField>
 					<template v-if="isPublicShare">
 						<NcCheckboxRadioSwitch :checked.sync="isPasswordProtected" :disabled="isPasswordEnforced">
 							{{ t('files_sharing', 'Set password') }}
@@ -144,7 +158,8 @@
 						:value="new Date(share.expireDate ?? dateTomorrow)"
 						:min="dateTomorrow"
 						:max="maxExpirationDateEnforced"
-						:hide-label="true"
+						hide-label
+						:label="t('files_sharing', 'Expiration date')"
 						:placeholder="t('files_sharing', 'Expiration date')"
 						type="date"
 						@input="onExpirationChange" />
@@ -154,7 +169,7 @@
 						@update:checked="queueUpdate('hideDownload')">
 						{{ t('files_sharing', 'Hide download') }}
 					</NcCheckboxRadioSwitch>
-					<NcCheckboxRadioSwitch v-if="!isPublicShare"
+					<NcCheckboxRadioSwitch v-else
 						:disabled="!canSetDownload"
 						:checked.sync="canDownload"
 						data-cy-files-sharing-share-permissions-checkbox="download">
@@ -168,6 +183,10 @@
 							:placeholder="t('files_sharing', 'Enter a note for the share recipient')"
 							:value.sync="share.note" />
 					</template>
+					<NcCheckboxRadioSwitch v-if="isPublicShare && isFolder"
+						:checked.sync="showInGridView">
+						{{ t('files_sharing', 'Show files in grid view') }}
+					</NcCheckboxRadioSwitch>
 					<ExternalShareAction v-for="action in externalLinkActions"
 						:id="action.id"
 						ref="externalLinkActions"
@@ -227,7 +246,7 @@
 		<div class="sharingTabDetailsView__footer">
 			<div class="button-group">
 				<NcButton data-cy-files-sharing-share-editor-action="cancel"
-					@click="$emit('close-sharing-details')">
+					@click="cancel">
 					{{ t('files_sharing', 'Cancel') }}
 				</NcButton>
 				<NcButton type="primary"
@@ -247,16 +266,17 @@
 import { emit } from '@nextcloud/event-bus'
 import { getLanguage } from '@nextcloud/l10n'
 import { ShareType } from '@nextcloud/sharing'
+import { showError } from '@nextcloud/dialogs'
 import moment from '@nextcloud/moment'
 
-import NcAvatar from '@nextcloud/vue/dist/Components/NcAvatar.js'
-import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
-import NcCheckboxRadioSwitch from '@nextcloud/vue/dist/Components/NcCheckboxRadioSwitch.js'
-import NcDateTimePickerNative from '@nextcloud/vue/dist/Components/NcDateTimePickerNative.js'
-import NcInputField from '@nextcloud/vue/dist/Components/NcInputField.js'
-import NcLoadingIcon from '@nextcloud/vue/dist/Components/NcLoadingIcon.js'
-import NcPasswordField from '@nextcloud/vue/dist/Components/NcPasswordField.js'
-import NcTextArea from '@nextcloud/vue/dist/Components/NcTextArea.js'
+import NcAvatar from '@nextcloud/vue/components/NcAvatar'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcDateTimePickerNative from '@nextcloud/vue/components/NcDateTimePickerNative'
+import NcInputField from '@nextcloud/vue/components/NcInputField'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
+import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 
 import CircleIcon from 'vue-material-design-icons/CircleOutline.vue'
 import CloseIcon from 'vue-material-design-icons/Close.vue'
@@ -271,6 +291,7 @@ import UploadIcon from 'vue-material-design-icons/Upload.vue'
 import MenuDownIcon from 'vue-material-design-icons/MenuDown.vue'
 import MenuUpIcon from 'vue-material-design-icons/MenuUp.vue'
 import DotsHorizontalIcon from 'vue-material-design-icons/DotsHorizontal.vue'
+import Refresh from 'vue-material-design-icons/Refresh.vue'
 
 import ExternalShareAction from '../components/ExternalShareAction.vue'
 
@@ -278,6 +299,7 @@ import GeneratePassword from '../utils/GeneratePassword.ts'
 import Share from '../models/Share.ts'
 import ShareRequests from '../mixins/ShareRequests.js'
 import SharesMixin from '../mixins/SharesMixin.js'
+import { generateToken } from '../services/TokenService.ts'
 import logger from '../services/logger.ts'
 
 import {
@@ -310,6 +332,7 @@ export default {
 		MenuDownIcon,
 		MenuUpIcon,
 		DotsHorizontalIcon,
+		Refresh,
 	},
 	mixins: [ShareRequests, SharesMixin],
 	props: {
@@ -338,6 +361,8 @@ export default {
 			isFirstComponentLoad: true,
 			test: false,
 			creating: false,
+			initialToken: this.share.token,
+			loadingToken: false,
 
 			ExternalShareActions: OCA.Sharing.ExternalShareActions.state,
 		}
@@ -418,28 +443,29 @@ export default {
 				this.updateAtomicPermissions({ isReshareChecked: checked })
 			},
 		},
+
+		/**
+		 * Change the default view for public shares from "list" to "grid"
+		 */
+		showInGridView: {
+			get() {
+				return this.getShareAttribute('config', 'grid_view', false)
+			},
+			/** @param {boolean} value If the default view should be changed to "grid" */
+			set(value) {
+				this.setShareAttribute('config', 'grid_view', value)
+			},
+		},
+
 		/**
 		 * Can the sharee download files or only view them ?
 		 */
 		canDownload: {
 			get() {
-				return this.share.attributes?.find(attr => attr.key === 'download')?.value ?? true
+				return this.getShareAttribute('permissions', 'download', true)
 			},
 			set(checked) {
-				// Find the 'download' attribute and update its value
-				const downloadAttr = this.share.attributes?.find(attr => attr.key === 'download')
-				if (downloadAttr) {
-					downloadAttr.value = checked
-				} else {
-					if (this.share.attributes === null) {
-						this.$set(this.share, 'attributes', [])
-					}
-					this.share.attributes.push({
-						scope: 'permissions',
-						key: 'download',
-						value: checked,
-					})
-				}
+				this.setShareAttribute('permissions', 'download', checked)
 			},
 		},
 		/**
@@ -534,9 +560,6 @@ export default {
 		},
 		isGroupShare() {
 			return this.share.type === ShareType.Group
-		},
-		isNewShare() {
-			return !this.share.id
 		},
 		allowsFileDrop() {
 			if (this.isFolder && this.config.isPublicUploadEnabled) {
@@ -720,7 +743,7 @@ export default {
 		},
 		errorPasswordLabel() {
 			if (this.passwordError) {
-				return t('files_sharing', "Password field can't be empty")
+				return t('files_sharing', 'Password field cannot be empty')
 			}
 			return undefined
 		},
@@ -765,6 +788,60 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * Set a share attribute on the current share
+		 * @param {string} scope The attribute scope
+		 * @param {string} key The attribute key
+		 * @param {boolean} value The value
+		 */
+		setShareAttribute(scope, key, value) {
+			if (!this.share.attributes) {
+				this.$set(this.share, 'attributes', [])
+			}
+
+			const attribute = this.share.attributes
+				.find((attr) => attr.scope === scope || attr.key === key)
+
+			if (attribute) {
+				attribute.value = value
+			} else {
+				this.share.attributes.push({
+					scope,
+					key,
+					value,
+				})
+			}
+		},
+
+		/**
+		 * Get the value of a share attribute
+		 * @param {string} scope The attribute scope
+		 * @param {string} key The attribute key
+		 * @param {undefined|boolean} fallback The fallback to return if not found
+		 */
+		getShareAttribute(scope, key, fallback = undefined) {
+			const attribute = this.share.attributes?.find((attr) => attr.scope === scope && attr.key === key)
+			return attribute?.value ?? fallback
+		},
+
+		async generateNewToken() {
+			if (this.loadingToken) {
+				return
+			}
+			this.loadingToken = true
+			try {
+				this.share.token = await generateToken()
+			} catch (error) {
+				showError(t('files_sharing', 'Failed to generate a new token'))
+			}
+			this.loadingToken = false
+		},
+
+		cancel() {
+			this.share.token = this.initialToken
+			this.$emit('close-sharing-details')
+		},
+
 		updateAtomicPermissions({
 			isReadChecked = this.hasRead,
 			isEditChecked = this.canEdit,
@@ -875,6 +952,9 @@ export default {
 		async saveShare() {
 			const permissionsAndAttributes = ['permissions', 'attributes', 'note', 'expireDate']
 			const publicShareAttributes = ['label', 'password', 'hideDownload']
+			if (this.config.allowCustomTokens) {
+				publicShareAttributes.push('token')
+			}
 			if (this.isPublicShare) {
 				permissionsAndAttributes.push(...publicShareAttributes)
 			}
@@ -930,6 +1010,7 @@ export default {
 				this.$emit('add:share', this.share)
 			} else {
 				this.$emit('update:share', this.share)
+				emit('update:share', this.share)
 				this.queueUpdate(...permissionsAndAttributes)
 			}
 
@@ -1171,6 +1252,10 @@ export default {
 				padding-inline-start: 1.5em;
 			}
 		}
+	}
+
+	&__label {
+		padding-block-end: 6px;
 	}
 
 	&__delete {
