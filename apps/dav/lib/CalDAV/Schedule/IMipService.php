@@ -1148,7 +1148,7 @@ class IMipService {
 			return false;
 		}
 		$type = $cuType->getValue() ?? 'INDIVIDUAL';
-		if (\in_array(strtoupper($type), ['RESOURCE', 'ROOM', 'UNKNOWN'], true)) {
+		if (\in_array(strtoupper($type), ['RESOURCE', 'ROOM'], true)) {
 			// Don't send emails to things
 			return true;
 		}
@@ -1240,12 +1240,12 @@ class IMipService {
 			'Second' => $this->l10n->t('Second'),
 			'Third' => $this->l10n->t('Third'),
 			'Fourth' => $this->l10n->t('Fourth'),
-			'Fifty' => $this->l10n->t('Fifty'),
+			'Fifth' => $this->l10n->t('Fifth'),
 			'Last' => $this->l10n->t('Last'),
 			'Second Last' => $this->l10n->t('Second Last'),
 			'Third Last' => $this->l10n->t('Third Last'),
 			'Fourth Last' => $this->l10n->t('Fourth Last'),
-			'Fifty Last' => $this->l10n->t('Fifty Last'),
+			'Fifth Last' => $this->l10n->t('Fifth Last'),
 		};
 	}
 }

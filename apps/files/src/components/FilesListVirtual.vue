@@ -57,16 +57,17 @@
 </template>
 
 <script lang="ts">
-import type { ComponentPublicInstance, PropType } from 'vue'
-import type { Node as NcNode } from '@nextcloud/files'
 import type { UserConfig } from '../types'
+import type { Node as NcNode } from '@nextcloud/files'
+import type { ComponentPublicInstance, PropType } from 'vue'
+import type { Location } from 'vue-router'
 
-import { defineComponent } from 'vue'
 import { getFileListHeaders, Folder, Permission, View, getFileActions, FileType } from '@nextcloud/files'
 import { showError } from '@nextcloud/dialogs'
 import { subscribe, unsubscribe } from '@nextcloud/event-bus'
 import { translate as t } from '@nextcloud/l10n'
-import { useHotKey } from '@nextcloud/vue/dist/Composables/useHotKey.js'
+import { useHotKey } from '@nextcloud/vue/composables/useHotKey'
+import { defineComponent } from 'vue'
 
 import { action as sidebarAction } from '../actions/sidebarAction.ts'
 import { getSummaryFor } from '../utils/fileUtils'
@@ -188,7 +189,7 @@ export default defineComponent({
 		caption() {
 			const defaultCaption = t('files', 'List of files and folders.')
 			const viewCaption = this.currentView.caption || defaultCaption
-			const cantUploadCaption = this.cantUpload ? t('files', 'You don’t have permission to upload or create files here.') : null
+			const cantUploadCaption = this.cantUpload ? t('files', 'You do not have permission to upload or create files here.') : null
 			const quotaExceededCaption = this.isQuotaExceeded ? t('files', 'You have used your space quota and cannot upload files anymore.') : null
 			const sortableCaption = t('files', 'Column headers with buttons are sortable.')
 			const virtualListNote = t('files', 'This list is not fully rendered for performance reasons. The files will be rendered as you navigate through the list.')
@@ -219,24 +220,25 @@ export default defineComponent({
 		},
 
 		openFile: {
-			handler() {
-				// wait for scrolling and updating the actions to settle
-				this.$nextTick(() => {
-					if (this.fileId && this.openFile) {
-						this.handleOpenFile(this.fileId)
-					}
-				})
+			handler(openFile) {
+				if (!openFile || !this.fileId) {
+					return
+				}
+
+				this.handleOpenFile(this.fileId)
 			},
 			immediate: true,
 		},
 
 		openDetails: {
-			handler() {
+			handler(openDetails) {
 				// wait for scrolling and updating the actions to settle
 				this.$nextTick(() => {
-					if (this.fileId && this.openDetails) {
-						this.openSidebarForFile(this.fileId)
+					if (!openDetails || !this.fileId) {
+						return
 					}
+
+					this.openSidebarForFile(this.fileId)
 				})
 			},
 			immediate: true,
@@ -276,7 +278,9 @@ export default defineComponent({
 			if (node && sidebarAction?.enabled?.([node], this.currentView)) {
 				logger.debug('Opening sidebar on file ' + node.path, { node })
 				sidebarAction.exec(node, this.currentView, this.currentFolder.path)
+				return
 			}
+			logger.error(`Failed to open sidebar on file ${fileId}, file isn't cached yet !`, { fileId, node })
 		},
 
 		scrollToFile(fileId: number|null, warn = true) {
@@ -329,30 +333,42 @@ export default defineComponent({
 		 * Handle opening a file (e.g. by ?openfile=true)
 		 * @param fileId File to open
 		 */
-		handleOpenFile(fileId: number|null) {
-			if (fileId === null || this.openFileId === fileId) {
-				return
-			}
-
+		async handleOpenFile(fileId: number) {
 			const node = this.nodes.find(n => n.fileid === fileId) as NcNode
-			if (node === undefined || node.type === FileType.Folder) {
+			if (node === undefined) {
 				return
 			}
 
-			logger.debug('Opening file ' + node.path, { node })
-			this.openFileId = fileId
-			const defaultAction = getFileActions()
-				// Get only default actions (visible and hidden)
-				.filter(action => !!action?.default)
-				// Find actions that are either always enabled or enabled for the current node
-				.filter((action) => !action.enabled || action.enabled([node], this.currentView))
-				// Sort enabled default actions by order
-				.sort((a, b) => (a.order || 0) - (b.order || 0))
-				// Get the first one
-				.at(0)
-			// Some file types do not have a default action (e.g. they can only be downloaded)
-			// So if there is an enabled default action, so execute it
-			defaultAction?.exec(node, this.currentView, this.currentFolder.path)
+			if (node.type === FileType.File) {
+				const defaultAction = getFileActions()
+					// Get only default actions (visible and hidden)
+					.filter((action) => !!action?.default)
+					// Find actions that are either always enabled or enabled for the current node
+					.filter((action) => !action.enabled || action.enabled([node], this.currentView))
+					.filter((action) => action.id !== 'download')
+					// Sort enabled default actions by order
+					.sort((a, b) => (a.order || 0) - (b.order || 0))
+					// Get the first one
+					.at(0)
+
+				// Some file types do not have a default action (e.g. they can only be downloaded)
+				// So if there is an enabled default action, so execute it
+				if (defaultAction) {
+					logger.debug('Opening file ' + node.path, { node })
+					return await defaultAction.exec(node, this.currentView, this.currentFolder.path)
+				}
+			}
+			// The file is either a folder or has no default action other than downloading
+			// in this case we need to open the details instead and remove the route from the history
+			const query = this.$route.query
+			delete query.openfile
+			query.opendetails = ''
+
+			logger.debug('Ignore `openfile` query and replacing with `opendetails` for ' + node.path, { node })
+			await this.$router.replace({
+				...(this.$route as Location),
+				query,
+			})
 		},
 
 		onDragOver(event: DragEvent) {
@@ -536,7 +552,6 @@ export default defineComponent({
 			flex-direction: column;
 			width: 100%;
 			background-color: var(--color-main-background);
-
 		}
 
 		// Table header
@@ -853,8 +868,7 @@ export default defineComponent({
 
 <style lang="scss">
 // Grid mode
-tbody.files-list__tbody.files-list__tbody--grid {
-	--half-clickable-area: calc(var(--clickable-area) / 2);
+.files-list--grid tbody.files-list__tbody {
 	--item-padding: 16px;
 	--icon-preview-size: 166px;
 	--name-height: 32px;
@@ -945,7 +959,7 @@ tbody.files-list__tbody.files-list__tbody--grid {
 
 	.files-list__row-actions {
 		position: absolute;
-		inset-inline-end: calc(var(--half-clickable-area) / 2);
+		inset-inline-end: calc(var(--clickable-area) / 4);
 		inset-block-end: calc(var(--mtime-height) / 2);
 		width: var(--clickable-area);
 		height: var(--clickable-area);

@@ -86,12 +86,13 @@
 				:checked.sync="defaultExpirationDateEnabled"
 				:disabled="pendingEnforcedExpirationDate || saving"
 				class="share-link-expiration-date-checkbox"
-				@change="onDefaultExpirationDateEnabledChange">
-				{{ config.enforcePasswordForPublicLink ? t('files_sharing', 'Enable link expiration (enforced)') : t('files_sharing', 'Enable link expiration') }}
+				@update:model-value="onExpirationDateToggleUpdate">
+				{{ config.isDefaultExpireDateEnforced ? t('files_sharing', 'Enable link expiration (enforced)') : t('files_sharing', 'Enable link expiration') }}
 			</NcActionCheckbox>
 
 			<!-- expiration date -->
 			<NcActionInput v-if="(pendingDefaultExpirationDate || pendingEnforcedExpirationDate) && defaultExpirationDateEnabled"
+				data-cy-files-sharing-expiration-date-input
 				class="share-link-expire-date"
 				:label="pendingEnforcedExpirationDate ? t('files_sharing', 'Enter expiration date (enforced)') : t('files_sharing', 'Enter expiration date')"
 				:disabled="saving"
@@ -101,7 +102,7 @@
 				type="date"
 				:min="dateTomorrow"
 				:max="maxExpirationDateEnforced"
-				@input="onExpirationChange /* let's not submit when picked, the user might want to still edit or copy the password */">
+				@change="expirationDateChanged($event)">
 				<template #icon>
 					<IconCalendarBlank :size="20" />
 				</template>
@@ -223,15 +224,15 @@ import VueQrcode from '@chenfengyuan/vue-qrcode'
 import moment from '@nextcloud/moment'
 import Vue from 'vue'
 
-import NcActionButton from '@nextcloud/vue/dist/Components/NcActionButton.js'
-import NcActionCheckbox from '@nextcloud/vue/dist/Components/NcActionCheckbox.js'
-import NcActionInput from '@nextcloud/vue/dist/Components/NcActionInput.js'
-import NcActionLink from '@nextcloud/vue/dist/Components/NcActionLink.js'
-import NcActionText from '@nextcloud/vue/dist/Components/NcActionText.js'
-import NcActionSeparator from '@nextcloud/vue/dist/Components/NcActionSeparator.js'
-import NcActions from '@nextcloud/vue/dist/Components/NcActions.js'
-import NcAvatar from '@nextcloud/vue/dist/Components/NcAvatar.js'
-import NcDialog from '@nextcloud/vue/dist/Components/NcDialog.js'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcActionCheckbox from '@nextcloud/vue/components/NcActionCheckbox'
+import NcActionInput from '@nextcloud/vue/components/NcActionInput'
+import NcActionLink from '@nextcloud/vue/components/NcActionLink'
+import NcActionText from '@nextcloud/vue/components/NcActionText'
+import NcActionSeparator from '@nextcloud/vue/components/NcActionSeparator'
+import NcActions from '@nextcloud/vue/components/NcActions'
+import NcAvatar from '@nextcloud/vue/components/NcAvatar'
+import NcDialog from '@nextcloud/vue/components/NcDialog'
 
 import Tune from 'vue-material-design-icons/Tune.vue'
 import IconCalendarBlank from 'vue-material-design-icons/CalendarBlank.vue'
@@ -357,11 +358,17 @@ export default {
 					}
 					return this.share.shareWith
 				}
+
+				if (this.index === null) {
+					return t('files_sharing', 'Share link')
+				}
 			}
-			if (this.index > 1) {
+
+			if (this.index >= 1) {
 				return t('files_sharing', 'Share link ({index})', { index: this.index })
 			}
-			return t('files_sharing', 'Share link')
+
+			return t('files_sharing', 'Create public link')
 		},
 
 		/**
@@ -590,8 +597,8 @@ export default {
 		},
 	},
 	mounted() {
-		if (this.share) {
-			this.defaultExpirationDateEnabled = this.config.defaultExpirationDate instanceof Date
+		this.defaultExpirationDateEnabled = this.config.defaultExpirationDate instanceof Date
+		if (this.share && this.isNewShare) {
 			this.share.expireDate = this.defaultExpirationDateEnabled ? this.formatDateToString(this.config.defaultExpirationDate) : ''
 		}
 	},
@@ -712,7 +719,7 @@ export default {
 					path,
 					shareType: ShareType.Link,
 					password: share.password,
-					expireDate: share.expireDate,
+					expireDate: share.expireDate ?? '',
 					attributes: JSON.stringify(this.fileInfo.shareAttributes),
 					// we do not allow setting the publicUpload
 					// before the share creation.
@@ -868,8 +875,18 @@ export default {
 			this.onPasswordSubmit()
 			this.onNoteSubmit()
 		},
-		onDefaultExpirationDateEnabledChange(enabled) {
+
+		/**
+		 * @param enabled True if expiration is enabled
+		 */
+		onExpirationDateToggleUpdate(enabled) {
 			this.share.expireDate = enabled ? this.formatDateToString(this.config.defaultExpirationDate) : ''
+		},
+
+		expirationDateChanged(event) {
+			const date = event.target.value
+			this.onExpirationChange(date)
+			this.defaultExpirationDateEnabled = !!date
 		},
 
 		/**
