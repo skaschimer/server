@@ -7,7 +7,6 @@ import { getCurrentUser } from '@nextcloud/auth'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { ShareType } from '@nextcloud/sharing'
 import { emit } from '@nextcloud/event-bus'
-import { fetchNode } from '../services/WebdavClient.ts'
 
 import PQueue from 'p-queue'
 import debounce from 'debounce'
@@ -20,6 +19,7 @@ import logger from '../services/logger.ts'
 import {
 	BUNDLED_PERMISSIONS,
 } from '../lib/SharePermissionsToolBox.js'
+import { fetchNode } from '../../../files/src/services/WebdavClient.ts'
 
 export default {
 	mixins: [SharesRequests],
@@ -110,6 +110,9 @@ export default {
 				monthFormat: 'MMM',
 			}
 		},
+		isNewShare() {
+			return !this.share.id
+		},
 		isFolder() {
 			return this.fileInfo.type === 'dir'
 		},
@@ -128,7 +131,7 @@ export default {
 				return this.config.isDefaultExpireDateEnforced
 			}
 			if (this.isRemoteShare) {
-			    return this.config.isDefaultRemoteExpireDateEnforced
+				return this.config.isDefaultRemoteExpireDateEnforced
 			}
 			return this.config.isDefaultInternalExpireDateEnforced
 		},
@@ -164,7 +167,7 @@ export default {
 		async getNode() {
 			const node = { path: this.path }
 			try {
-				this.node = await fetchNode(node)
+				this.node = await fetchNode(node.path)
 				logger.info('Fetched node:', { node: this.node })
 			} catch (error) {
 				logger.error('Error:', error)
@@ -209,17 +212,9 @@ export default {
 		 *
 		 * @param {Date} date
 		 */
-		onExpirationChange: debounce(function(date) {
-			this.share.expireDate = this.formatDateToString(new Date(date))
-		}, 500),
-		/**
-		 * Uncheck expire date
-		 * We need this method because @update:checked
-		 * is ran simultaneously as @uncheck, so
-		 * so we cannot ensure data is up-to-date
-		 */
-		onExpirationDisable() {
-			this.share.expireDate = ''
+		onExpirationChange(date) {
+			const formattedDate = date ? this.formatDateToString(new Date(date)) : ''
+			this.share.expireDate = formattedDate
 		},
 
 		/**

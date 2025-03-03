@@ -610,13 +610,13 @@ class View {
 				$this->lockFile($path, ILockingProvider::LOCK_SHARED);
 
 				$exists = $this->file_exists($path);
-				$run = true;
 				if ($this->shouldEmitHooks($path)) {
+					$run = true;
 					$this->emit_file_hooks_pre($exists, $path, $run);
-				}
-				if (!$run) {
-					$this->unlockFile($path, ILockingProvider::LOCK_SHARED);
-					return false;
+					if (!$run) {
+						$this->unlockFile($path, ILockingProvider::LOCK_SHARED);
+						return false;
+					}
 				}
 
 				try {
@@ -2062,9 +2062,9 @@ class View {
 				);
 			}
 		} catch (LockedException $e) {
-			// rethrow with the a human-readable path
+			// rethrow with the human-readable path
 			throw new LockedException(
-				$this->getPathRelativeToFiles($absolutePath),
+				$path,
 				$e,
 				$e->getExistingLock()
 			);
@@ -2102,20 +2102,12 @@ class View {
 				);
 			}
 		} catch (LockedException $e) {
-			try {
-				// rethrow with the a human-readable path
-				throw new LockedException(
-					$this->getPathRelativeToFiles($absolutePath),
-					$e,
-					$e->getExistingLock()
-				);
-			} catch (\InvalidArgumentException $ex) {
-				throw new LockedException(
-					$absolutePath,
-					$ex,
-					$e->getExistingLock()
-				);
-			}
+			// rethrow with the a human-readable path
+			throw new LockedException(
+				$path,
+				$e,
+				$e->getExistingLock()
+			);
 		}
 
 		return true;

@@ -4,7 +4,7 @@
  */
 import type { User } from '@nextcloud/cypress'
 import { createShare, openSharingPanel } from './FilesSharingUtils.ts'
-import { getRowForFile, navigateToFolder } from '../files/FilesUtils.ts'
+import { navigateToFolder } from '../files/FilesUtils.ts'
 
 describe('files_sharing: Note to recipient', { testIsolation: true }, () => {
 	let user: User
@@ -59,7 +59,7 @@ describe('files_sharing: Note to recipient', { testIsolation: true }, () => {
 
 		cy.get('[data-cy-sidebar]').within(() => {
 			// Open the share
-			cy.get('[data-cy-files-sharing-share-actions]').first().click()
+			cy.get('[data-cy-files-sharing-share-actions]').first().click({ force: true })
 			// Open the custom settings
 			cy.get('[data-cy-files-sharing-share-permissions-bundle="custom"]').click()
 

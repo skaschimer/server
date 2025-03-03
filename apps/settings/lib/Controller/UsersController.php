@@ -32,6 +32,7 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\TemplateResponse;
@@ -42,11 +43,13 @@ use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IConfig;
 use OCP\IGroupManager;
 use OCP\IL10N;
+use OCP\INavigationManager;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
 use OCP\L10N\IFactory;
 use OCP\Mail\IMailer;
+use OCP\Server;
 use OCP\Util;
 use function in_array;
 
@@ -100,7 +103,7 @@ class UsersController extends Controller {
 		$isAdmin = $this->groupManager->isAdmin($uid);
 		$isDelegatedAdmin = $this->groupManager->isDelegatedAdmin($uid);
 
-		\OC::$server->getNavigationManager()->setActiveEntry('core_users');
+		Server::get(INavigationManager::class)->setActiveEntry('core_users');
 
 		/* SORT OPTION: SORT_USERCOUNT or SORT_GROUPNAME */
 		$sortGroupsBy = MetaData::SORT_USERCOUNT;
@@ -314,6 +317,7 @@ class UsersController extends Controller {
 	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
+	#[UserRateLimit(limit: 5, period: 60)]
 	public function setUserSettings(?string $avatarScope = null,
 		?string $displayname = null,
 		?string $displaynameScope = null,

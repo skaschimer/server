@@ -258,6 +258,11 @@ async function openFilePickerForAction(
 				return buttons
 			}
 
+			if (selection.some((node) => (node.permissions & Permission.CREATE) === 0)) {
+				// Missing 'CREATE' permissions for selected destination
+				return buttons
+			}
+
 			if (action === MoveCopyAction.MOVE || action === MoveCopyAction.MOVE_OR_COPY) {
 				buttons.push({
 					label: target ? t('files', 'Move to {target}', { target }, undefined, { escape: false, sanitize: false }) : t('files', 'Move'),
@@ -289,8 +294,9 @@ async function openFilePickerForAction(
 	return promise
 }
 
+export const ACTION_COPY_MOVE = 'move-copy'
 export const action = new FileAction({
-	id: 'move-copy',
+	id: ACTION_COPY_MOVE,
 	displayName(nodes: Node[]) {
 		switch (getActionForNodes(nodes)) {
 		case MoveCopyAction.MOVE:
