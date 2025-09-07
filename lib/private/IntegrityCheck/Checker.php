@@ -178,6 +178,7 @@ class Checker {
 
 		$signature = $privateKey
 			->withPadding(RSA::SIGNATURE_PSS)
+			->withHash('sha1')
 			->withMGFHash('sha512')
 			->withSaltLength(0)
 			->sign(json_encode($hashes));
@@ -318,6 +319,7 @@ class Checker {
 
 		$rsa = $rsa
 			->withPadding(RSA::SIGNATURE_PSS)
+			->withHash('sha1')
 			->withMGFHash('sha512')
 			->withSaltLength(0);
 
