@@ -16,7 +16,6 @@ use OC\Core\Middleware\TwoFactorMiddleware;
 use OCP\AppFramework\App;
 use OCP\EventDispatcher\IEventDispatcher;
 use PHPUnit\Framework\MockObject\MockObject;
-use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Test\TestCase;
 
