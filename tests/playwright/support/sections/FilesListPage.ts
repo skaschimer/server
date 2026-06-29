@@ -205,8 +205,7 @@ export class FilesListPage {
 
 	/**
 	 * The clickable name link of a row. Clicking it opens a folder or previews a
-	 * file; for an unavailable external storage it is inert (and carries the
-	 * "This node is unavailable" title).
+	 * file; for an unavailable storage it is inert.
 	 */
 	getRowNameLinkForFile(filename: string): Locator {
 		return this.getRowForFile(filename).locator('[data-cy-files-list-row-name-link]')
