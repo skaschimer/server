@@ -3,197 +3,188 @@
  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcDialog
-		id="unified-search"
-		ref="unifiedSearchModal"
-		class="unified-search-modal-root"
-		content-classes="unified-search-modal__content"
-		dialog-classes="unified-search-modal"
-		:name="t('core', 'Unified search')"
-		:open="open"
-		size="normal"
-		@update:open="onUpdateOpen">
-		<!-- Modal for picking custom time range -->
-		<CustomDateRangeModal
-			:is-open="showDateRangeModal"
-			class="unified-search__date-range"
-			@set:custom-date-range="setCustomDateRange"
-			@update:is-open="showDateRangeModal = $event" />
+	<transition name="unified-search-modal" appear>
+		<div
+			v-if="open"
+			class="unified-search-modal-root">
+			<!-- Modal for picking custom time range -->
+			<CustomDateRangeModal
+				:isOpen="showDateRangeModal"
+				class="unified-search__date-range"
+				@set:customDateRange="setCustomDateRange"
+				@update:isOpen="showDateRangeModal = $event" />
 
-		<!-- Unified search form -->
-		<div class="unified-search-modal__header">
-			<NcInputField
-				ref="searchInput"
-				v-model="searchQuery"
-				data-cy-unified-search-input
-				type="text"
-				:label="t('core', 'Search apps, files, tags, messages') + '...'"
-				@update:value="debouncedFind" />
-			<div class="unified-search-modal__filters" data-cy-unified-search-filters>
-				<NcActions :open.sync="providerActionMenuIsOpen" :menu-name="t('core', 'Places')" data-cy-unified-search-filter="places">
-					<template #icon>
-						<IconListBox :size="20" />
-					</template>
-					<!-- Provider id's may be duplicated since, plugin filters could depend on a provider that is already in the defaults.
+			<div ref="panel" class="unified-search-modal-container">
+				<!-- Unified search form -->
+				<div class="unified-search-modal__header">
+					<div class="unified-search-modal__filters" data-cy-unified-search-filters>
+						<NcActions v-model:open="providerActionMenuIsOpen" :menuName="t('core', 'Places')" data-cy-unified-search-filter="places">
+							<template #icon>
+								<IconListBox :size="20" />
+							</template>
+							<!-- Provider id's may be duplicated since, plugin filters could depend on a provider that is already in the defaults.
 					provider.id concatenated to provider.name is used to create the item id, if same then, there should be an issue. -->
-					<NcActionButton
-						v-for="provider in providers"
-						:key="`${provider.id}-${provider.name.replace(/\s/g, '')}`"
-						:disabled="provider.disabled"
-						@click="addProviderFilter(provider)">
-						<template #icon>
-							<img :src="provider.icon" class="filter-button__icon" alt="">
-						</template>
-						{{ provider.name }}
-					</NcActionButton>
-				</NcActions>
-				<NcActions :open.sync="dateActionMenuIsOpen" :menu-name="t('core', 'Date')" data-cy-unified-search-filter="date">
-					<template #icon>
-						<IconCalendarRange :size="20" />
-					</template>
-					<NcActionButton :close-after-click="true" @click="applyQuickDateRange('today')">
-						{{ t('core', 'Today') }}
-					</NcActionButton>
-					<NcActionButton :close-after-click="true" @click="applyQuickDateRange('7days')">
-						{{ t('core', 'Last 7 days') }}
-					</NcActionButton>
-					<NcActionButton :close-after-click="true" @click="applyQuickDateRange('30days')">
-						{{ t('core', 'Last 30 days') }}
-					</NcActionButton>
-					<NcActionButton :close-after-click="true" @click="applyQuickDateRange('thisyear')">
-						{{ t('core', 'This year') }}
-					</NcActionButton>
-					<NcActionButton :close-after-click="true" @click="applyQuickDateRange('lastyear')">
-						{{ t('core', 'Last year') }}
-					</NcActionButton>
-					<NcActionButton :close-after-click="true" @click="applyQuickDateRange('custom')">
-						{{ t('core', 'Custom date range') }}
-					</NcActionButton>
-				</NcActions>
-				<SearchableList
-					:label-text="t('core', 'Search people')"
-					:search-list="userContacts"
-					:empty-content-text="t('core', 'Not found')"
-					data-cy-unified-search-filter="people"
-					@search-term-change="debouncedFilterContacts"
-					@item-selected="applyPersonFilter">
-					<template #trigger>
-						<NcButton>
+							<NcActionButton
+								v-for="provider in providers"
+								:key="`${provider.id}-${provider.name.replace(/\s/g, '')}`"
+								:disabled="provider.disabled"
+								@click="addProviderFilter(provider)">
+								<template #icon>
+									<img :src="provider.icon" class="filter-button__icon" alt="">
+								</template>
+								{{ provider.name }}
+							</NcActionButton>
+						</NcActions>
+						<NcActions v-model:open="dateActionMenuIsOpen" :menuName="t('core', 'Date')" data-cy-unified-search-filter="date">
 							<template #icon>
-								<IconAccountGroup :size="20" />
+								<IconCalendarRange :size="20" />
 							</template>
-							{{ t('core', 'People') }}
-						</NcButton>
-					</template>
-				</SearchableList>
-				<NcButton v-if="localSearch" data-cy-unified-search-filter="current-view" @click="searchLocally">
-					{{ t('core', 'Filter in current view') }}
-					<template #icon>
-						<IconFilter :size="20" />
-					</template>
-				</NcButton>
-				<NcCheckboxRadioSwitch
-					v-if="hasExternalResources"
-					v-model="searchExternalResources"
-					type="switch"
-					class="unified-search-modal__search-external-resources"
-					:class="{ 'unified-search-modal__search-external-resources--aligned': localSearch }">
-					{{ t('core', 'Search connected services') }}
-				</NcCheckboxRadioSwitch>
-			</div>
-			<div class="unified-search-modal__filters-applied">
-				<FilterChip
-					v-for="filter in filters"
-					:key="filter.id"
-					:text="filter.name ?? filter.text"
-					pretext=""
-					@delete="removeFilter(filter)">
-					<template #icon>
-						<NcAvatar
-							v-if="filter.type === 'person'"
-							:user="filter.user"
-							:size="24"
-							disable-menu
-							hide-user-status
-							:hide-favorite="false" />
-						<IconCalendarRange v-else-if="filter.type === 'date'" />
-						<img v-else :src="filter.icon" alt="">
-					</template>
-				</FilterChip>
-			</div>
-		</div>
-
-		<div v-if="showEmptyContentInfo" class="unified-search-modal__no-content">
-			<NcEmptyContent :name="emptyContentMessage">
-				<template #icon>
-					<IconMagnify :size="64" />
-				</template>
-			</NcEmptyContent>
-		</div>
-
-		<div v-else class="unified-search-modal__results">
-			<h3 class="hidden-visually">
-				{{ t('core', 'Results') }}
-			</h3>
-			<!-- Filtered results section -->
-			<div v-for="providerResult in filteredResults" :key="providerResult.id" class="result">
-				<h4 :id="`unified-search-result-${providerResult.id}`" class="result-title">
-					{{ providerResult.name }}
-				</h4>
-				<ul class="result-items" :aria-labelledby="`unified-search-result-${providerResult.id}`">
-					<SearchResult
-						v-for="(result, index) in providerResult.results"
-						:key="index"
-						v-bind="result" />
-				</ul>
-				<div class="result-footer">
-					<NcButton v-if="providerResult.results.length === providerResult.limit" variant="tertiary-no-background" @click="loadMoreResultsForProvider(providerResult)">
-						{{ t('core', 'Load more results') }}
-						<template #icon>
-							<IconDotsHorizontal :size="20" />
-						</template>
-					</NcButton>
-					<NcButton v-if="providerResult.inAppSearch" alignment="end-reverse" variant="tertiary-no-background">
-						{{ t('core', 'Search in') }} {{ providerResult.name }}
-						<template #icon>
-							<IconArrowRight :size="20" />
-						</template>
-					</NcButton>
-				</div>
-			</div>
-			<!-- Unfiltered results section -->
-			<template v-if="unfilteredResults.length > 0">
-				<div class="unified-search-modal__unfiltered-header">
-					<span class="unified-search-modal__unfiltered-label">{{ t('core', 'Partial matches') }}</span>
-				</div>
-				<div v-for="providerResult in unfilteredResults" :key="`unfiltered-${providerResult.id}`" class="result result--unfiltered">
-					<h4 :id="`unified-search-result-unfiltered-${providerResult.id}`" class="result-title">
-						{{ providerResult.name }}
-					</h4>
-					<ul class="result-items" :aria-labelledby="`unified-search-result-unfiltered-${providerResult.id}`">
-						<SearchResult
-							v-for="(result, index) in providerResult.results"
-							:key="index"
-							v-bind="result" />
-					</ul>
-					<div class="result-footer">
-						<NcButton v-if="providerResult.results.length === providerResult.limit" variant="tertiary-no-background" @click="loadMoreResultsForProvider(providerResult)">
-							{{ t('core', 'Load more results') }}
+							<NcActionButton :closeAfterClick="true" @click="applyQuickDateRange('today')">
+								{{ t('core', 'Today') }}
+							</NcActionButton>
+							<NcActionButton :closeAfterClick="true" @click="applyQuickDateRange('7days')">
+								{{ t('core', 'Last 7 days') }}
+							</NcActionButton>
+							<NcActionButton :closeAfterClick="true" @click="applyQuickDateRange('30days')">
+								{{ t('core', 'Last 30 days') }}
+							</NcActionButton>
+							<NcActionButton :closeAfterClick="true" @click="applyQuickDateRange('thisyear')">
+								{{ t('core', 'This year') }}
+							</NcActionButton>
+							<NcActionButton :closeAfterClick="true" @click="applyQuickDateRange('lastyear')">
+								{{ t('core', 'Last year') }}
+							</NcActionButton>
+							<NcActionButton :closeAfterClick="true" @click="applyQuickDateRange('custom')">
+								{{ t('core', 'Custom date range') }}
+							</NcActionButton>
+						</NcActions>
+						<SearchableList
+							:labelText="t('core', 'Search people')"
+							:searchList="userContacts"
+							:emptyContentText="t('core', 'Not found')"
+							data-cy-unified-search-filter="people"
+							@searchTermChange="debouncedFilterContacts"
+							@itemSelected="applyPersonFilter">
+							<template #trigger>
+								<NcButton>
+									<template #icon>
+										<IconAccountGroup :size="20" />
+									</template>
+									{{ t('core', 'People') }}
+								</NcButton>
+							</template>
+						</SearchableList>
+						<NcButton v-if="localSearch" data-cy-unified-search-filter="current-view" @click="searchLocally">
+							{{ t('core', 'Filter in current view') }}
 							<template #icon>
-								<IconDotsHorizontal :size="20" />
+								<IconFilter :size="20" />
 							</template>
 						</NcButton>
-						<NcButton v-if="providerResult.inAppSearch" alignment="end-reverse" variant="tertiary-no-background">
-							{{ t('core', 'Search in') }} {{ providerResult.name }}
+						<NcCheckboxRadioSwitch
+							v-if="hasExternalResources"
+							v-model="searchExternalResources"
+							type="switch"
+							class="unified-search-modal__search-external-resources"
+							:class="{ 'unified-search-modal__search-external-resources--aligned': localSearch }">
+							{{ t('core', 'Search connected services') }}
+						</NcCheckboxRadioSwitch>
+					</div>
+					<div class="unified-search-modal__filters-applied">
+						<FilterChip
+							v-for="filter in filters"
+							:key="filter.id"
+							:text="filter.name ?? filter.text"
+							pretext=""
+							@delete="removeFilter(filter)">
 							<template #icon>
-								<IconArrowRight :size="20" />
+								<NcAvatar
+									v-if="filter.type === 'person'"
+									:user="filter.user"
+									:size="24"
+									disableMenu
+									hideUserStatus
+									:hideFavorite="false" />
+								<IconCalendarRange v-else-if="filter.type === 'date'" />
+								<img v-else :src="filter.icon" alt="">
 							</template>
-						</NcButton>
+						</FilterChip>
 					</div>
 				</div>
-			</template>
+
+				<div v-if="showEmptyContentInfo" class="unified-search-modal__no-content">
+					<NcEmptyContent :name="emptyContentMessage">
+						<template #icon>
+							<IconMagnify :size="64" />
+						</template>
+					</NcEmptyContent>
+				</div>
+
+				<div v-else class="unified-search-modal__results">
+					<h3 class="hidden-visually">
+						{{ t('core', 'Results') }}
+					</h3>
+					<!-- Filtered results section -->
+					<div v-for="providerResult in filteredResults" :key="providerResult.id" class="result">
+						<h4 :id="`unified-search-result-${providerResult.id}`" class="result-title">
+							{{ providerResult.name }}
+						</h4>
+						<ul class="result-items" :aria-labelledby="`unified-search-result-${providerResult.id}`">
+							<SearchResult
+								v-for="(result, index) in providerResult.results"
+								:key="index"
+								v-bind="result" />
+						</ul>
+						<div class="result-footer">
+							<NcButton v-if="providerResult.results.length === providerResult.limit" variant="tertiary-no-background" @click="loadMoreResultsForProvider(providerResult)">
+								{{ t('core', 'Load more results') }}
+								<template #icon>
+									<IconDotsHorizontal :size="20" />
+								</template>
+							</NcButton>
+							<NcButton v-if="providerResult.inAppSearch" alignment="end-reverse" variant="tertiary-no-background">
+								{{ t('core', 'Search in') }} {{ providerResult.name }}
+								<template #icon>
+									<IconArrowRight :size="20" />
+								</template>
+							</NcButton>
+						</div>
+					</div>
+					<!-- Unfiltered results section -->
+					<template v-if="unfilteredResults.length > 0">
+						<div class="unified-search-modal__unfiltered-header">
+							<span class="unified-search-modal__unfiltered-label">{{ t('core', 'Partial matches') }}</span>
+						</div>
+						<div v-for="providerResult in unfilteredResults" :key="`unfiltered-${providerResult.id}`" class="result result--unfiltered">
+							<h4 :id="`unified-search-result-unfiltered-${providerResult.id}`" class="result-title">
+								{{ providerResult.name }}
+							</h4>
+							<ul class="result-items" :aria-labelledby="`unified-search-result-unfiltered-${providerResult.id}`">
+								<SearchResult
+									v-for="(result, index) in providerResult.results"
+									:key="index"
+									v-bind="result" />
+							</ul>
+							<div class="result-footer">
+								<NcButton v-if="providerResult.results.length === providerResult.limit" variant="tertiary-no-background" @click="loadMoreResultsForProvider(providerResult)">
+									{{ t('core', 'Load more results') }}
+									<template #icon>
+										<IconDotsHorizontal :size="20" />
+									</template>
+								</NcButton>
+								<NcButton v-if="providerResult.inAppSearch" alignment="end-reverse" variant="tertiary-no-background">
+									{{ t('core', 'Search in') }} {{ providerResult.name }}
+									<template #icon>
+										<IconArrowRight :size="20" />
+									</template>
+								</NcButton>
+							</div>
+						</div>
+					</template>
+				</div>
+			</div>
+			<div class="unified-search-modal-scrim" @click="onUpdateOpen(false)" />
 		</div>
-	</NcDialog>
+	</transition>
 </template>
 
 <script lang="ts">
@@ -202,15 +193,14 @@ import { loadState } from '@nextcloud/initial-state'
 import { getCanonicalLocale, n, t } from '@nextcloud/l10n'
 import { useBrowserLocation } from '@vueuse/core'
 import debounce from 'debounce'
-import { defineComponent } from 'vue'
+import { type FocusTrap,createFocusTrap } from 'focus-trap'
+import { type PropType,defineComponent, markRaw } from 'vue'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActions from '@nextcloud/vue/components/NcActions'
 import NcAvatar from '@nextcloud/vue/components/NcAvatar'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
-import NcInputField from '@nextcloud/vue/components/NcInputField'
 import IconAccountGroup from 'vue-material-design-icons/AccountGroupOutline.vue'
 import IconArrowRight from 'vue-material-design-icons/ArrowRight.vue'
 import IconCalendarRange from 'vue-material-design-icons/CalendarRangeOutline.vue'
@@ -244,8 +234,6 @@ export default defineComponent({
 		NcAvatar,
 		NcButton,
 		NcEmptyContent,
-		NcDialog,
-		NcInputField,
 		NcCheckboxRadioSwitch,
 		SearchableList,
 		SearchResult,
@@ -274,6 +262,14 @@ export default defineComponent({
 		localSearch: {
 			type: Boolean,
 			default: false,
+		},
+
+		/**
+		 * The header input element (lives in a sibling component), for the popover's focus trap
+		 */
+		inputElement: {
+			type: (null as unknown) as PropType<HTMLElement | null>,
+			default: null,
 		},
 	},
 
@@ -322,6 +318,9 @@ export default defineComponent({
 			initialized: false,
 			searchExternalResources: false,
 			minSearchLength: loadState('unified-search', 'min-search-length', 1),
+			// Focus trap spanning [header input, popover panel]; markRaw'd so Vue
+			// doesn't make the trap instance reactive.
+			focusTrap: null as FocusTrap | null,
 		}
 	},
 
@@ -424,7 +423,9 @@ export default defineComponent({
 		open() {
 			// Load results when opened with already filled query
 			if (this.open) {
-				this.focusInput()
+				document.addEventListener('keydown', this.onEscapeKey)
+				// Wait for the panel to render before trapping focus across it + the input
+				this.$nextTick(() => this.activateFocusTrap())
 				if (!this.initialized) {
 					Promise.all([getProviders(), getContacts({ searchTerm: '' })])
 						.then(([providers, contacts]) => {
@@ -440,7 +441,24 @@ export default defineComponent({
 				if (this.searchQuery) {
 					this.find(this.searchQuery)
 				}
+			} else {
+				document.removeEventListener('keydown', this.onEscapeKey)
+				this.deactivateFocusTrap()
 			}
+		},
+
+		// Filter menus and the date-range dialog teleport outside the trap; pause it
+		// while any is open so focus can move into them, then resume.
+		providerActionMenuIsOpen() {
+			this.toggleFocusTrapForOverlays()
+		},
+
+		dateActionMenuIsOpen() {
+			this.toggleFocusTrapForOverlays()
+		},
+
+		showDateRangeModal() {
+			this.toggleFocusTrapForOverlays()
 		},
 
 		query: {
@@ -453,6 +471,7 @@ export default defineComponent({
 		searchQuery: {
 			handler() {
 				this.$emit('update:query', this.searchQuery)
+				this.debouncedFind(this.searchQuery)
 			},
 		},
 
@@ -481,17 +500,80 @@ export default defineComponent({
 		},
 
 		/**
+		 * Close the search on Escape. Sub-menus / sub-dialogs (filter actions, the
+		 * date-range dialog) handle Escape themselves, so only close the popover
+		 * when none of them are open.
+		 *
+		 * @param event The keyboard event
+		 */
+		onEscapeKey(event: KeyboardEvent) {
+			if (event.key !== 'Escape') {
+				return
+			}
+			if (this.providerActionMenuIsOpen || this.dateActionMenuIsOpen || this.showDateRangeModal) {
+				return
+			}
+			event.preventDefault()
+			this.onUpdateOpen(false)
+		},
+
+		/**
+		 * Trap focus across the header input and the popover panel so Tab cycles
+		 * within them (and wraps) instead of escaping to the rest of the header.
+		 */
+		activateFocusTrap() {
+			if (this.focusTrap || !this.open) {
+				return
+			}
+			const panel = this.$refs.panel as HTMLElement | undefined
+			if (!panel) {
+				return
+			}
+			// focus-trap collects tabbables *inside* each container, not the container
+			// element itself. The bare <input> is a leaf, so pass its wrapper (which
+			// holds the input and the clear button); input first to match DOM order.
+			const inputContainer = (this.inputElement?.closest('.unified-search-input') ?? null) as HTMLElement | null
+			const containers = inputContainer ? [inputContainer, panel] : [panel]
+			this.focusTrap = markRaw(createFocusTrap(containers, {
+				initialFocus: this.inputElement ?? panel,
+				// We own closing via Escape (onEscapeKey) and scrim click
+				escapeDeactivates: false,
+				// Let scrim clicks reach their handler instead of being swallowed
+				allowOutsideClick: true,
+			}))
+			this.focusTrap.activate()
+		},
+
+		/**
+		 * Tear down the focus trap (returns focus to where it was before opening).
+		 */
+		deactivateFocusTrap() {
+			this.focusTrap?.deactivate()
+			this.focusTrap = null
+		},
+
+		/**
+		 * Pause the trap while a teleported menu / dialog is open so focus can move
+		 * into it, and resume once they have all closed.
+		 */
+		toggleFocusTrapForOverlays() {
+			if (!this.focusTrap) {
+				return
+			}
+			const overlayOpen = this.providerActionMenuIsOpen || this.dateActionMenuIsOpen || this.showDateRangeModal
+			if (overlayOpen) {
+				this.focusTrap.pause()
+			} else {
+				this.focusTrap.unpause()
+			}
+		},
+
+		/**
 		 * Only close the modal but keep the query for in-app search
 		 */
 		searchLocally() {
 			this.$emit('update:query', this.searchQuery)
 			this.$emit('update:open', false)
-		},
-
-		focusInput() {
-			this.$nextTick(() => {
-				this.$refs.searchInput?.focus()
-			})
 		},
 
 		find(query: string, providersToSearchOverride = null) {
@@ -879,16 +961,79 @@ export default defineComponent({
 </script>
 
 <style lang="scss" scoped>
-.unified-search-modal-root :deep(.modal-container) {
-	box-sizing: border-box;
-	height: min(80vh, 800px);
+
+// Anchor the popover under the header input (the .unified-search-menu parent is
+// the positioning context) instead of centering it in the viewport. The scrim is
+// fixed separately so it still dims the whole page.
+.unified-search-modal-root {
+	position: absolute;
+	inset-block-start: 100%;
+	inset-inline: 0;
+	z-index: 50 !important;
+	margin-block-start: 8px;
+	display: flex;
+	justify-content: center;
 }
 
-:deep(.unified-search-modal .unified-search-modal__content) {
+// Backdrop, mirrors NcModal's .modal-mask. Fixed so it covers the whole viewport
+// regardless of the anchored root.
+.unified-search-modal-scrim {
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	--backdrop-color: 0, 0, 0;
+	background-color: rgba(var(--backdrop-color), 0.5);
+}
+
+// Dialog panel: NcModal's "normal" chrome, but width-matched to the header input
+// and anchored under it, growing downward and scrolling internally when tall.
+.unified-search-modal-container {
+	position: relative;
+	z-index: 1;
 	display: flex;
 	flex-direction: column;
-	// No padding to prevent scrollbar misplacement
-	padding-inline: 0;
+	// Match the previous unified-search modal (NcModal "normal" size). flex-shrink: 0
+	// stops the flex parent from collapsing it below 600px when the menu is narrower.
+	flex-shrink: 0;
+	width: 600px;
+	max-width: 90vw;
+	// Leave ~10vh below the panel so it does not reach the bottom of the page
+	max-height: calc(90vh - var(--header-height));
+	border-radius: var(--border-radius-container, var(--border-radius-rounded));
+	// Clip the header/results to the rounded corners
+	overflow: hidden;
+	background-color: var(--color-main-background);
+	color: var(--color-main-text);
+	box-shadow: 0 0 40px rgba(0, 0, 0, 0.2);
+	// The panel slides down into place; the enter/leave classes set the start offset
+	transition: transform 100ms ease-out;
+}
+
+// Fullscreen on small viewports, mirrors NcModal's responsive breakpoint
+@media only screen and ((max-width: 512px) or (max-height: 400px)) {
+	.unified-search-modal-container {
+		width: 100%;
+		max-width: initial;
+		height: 100%;
+		max-height: initial;
+		border-radius: 0;
+	}
+}
+
+// Open/close animation: the backdrop fades while the panel slides down from the top
+.unified-search-modal-enter-active,
+.unified-search-modal-leave-active {
+	transition: opacity 250ms;
+}
+
+.unified-search-modal-enter,
+.unified-search-modal-leave-to {
+	opacity: 0;
+}
+
+.unified-search-modal-enter .unified-search-modal-container,
+.unified-search-modal-leave-to .unified-search-modal-container {
+	transform: translateY(-6px);
 }
 
 .unified-search-modal {
@@ -896,9 +1041,9 @@ export default defineComponent({
 		// Add background to prevent leaking scrolled content (because of sticky position)
 		background-color: var(--color-main-background);
 		// Fix padding to have the input centered
-		padding-inline-end: 12px;
+		padding-inline: 12px;
 		// Some padding to make elements scrolled under sticky position look nicer
-		padding-block-end: 12px;
+		padding-block: 12px;
 		// Make it sticky with the input margin for the label
 		position: sticky;
 		top: 6px;
@@ -941,9 +1086,12 @@ export default defineComponent({
 	}
 
 	&__results {
+		// Take the remaining panel height and scroll internally (container has a max-height)
+		flex: 1 1 auto;
+		min-height: 0;
 		overflow: hidden auto;
 		// Adjust padding to match container but keep the scrollbar on the very end
-		padding-inline: 0 12px;
+		padding-inline: 12px;
 		padding-block: 0 12px;
 
 		.result {

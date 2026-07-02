@@ -5,17 +5,24 @@
 <template>
 	<div class="unified-search-menu">
 		<UnifiedSearchInput
+			ref="searchInput"
+			:query="queryText"
 			:expanded="showUnifiedSearch || showLocalSearch"
-			@click="toggleUnifiedSearch" />
+			@update:query="queryText = $event" />
 		<UnifiedSearchLocalSearchBar
 			v-if="supportsLocalSearch"
-			:open.sync="showLocalSearch"
-			:query.sync="queryText"
-			@global-search="openModal" />
+			:open="showLocalSearch"
+			:query="queryText"
+			@globalSearch="openModal"
+			@update:open="showLocalSearch = $event"
+			@update:query="queryText = $event" />
 		<UnifiedSearchModal
-			:local-search="supportsLocalSearch"
-			:query.sync="queryText"
-			:open.sync="showUnifiedSearch" />
+			:localSearch="supportsLocalSearch"
+			:inputElement="inputElement"
+			:query="queryText"
+			:open="showUnifiedSearch"
+			@update:query="queryText = $event"
+			@update:open="showUnifiedSearch = $event" />
 	</div>
 </template>
 
@@ -57,6 +64,8 @@ export default defineComponent({
 			showUnifiedSearch: false,
 			/** Open state of the local search bar */
 			showLocalSearch: false,
+			/** The header input element, read from the child and handed to the modal's focus trap */
+			inputElement: null as HTMLElement | null,
 		}
 	},
 
@@ -95,6 +104,10 @@ export default defineComponent({
 		 */
 		queryText() {
 			this.debouncedQueryUpdate()
+			// Open the search popover only once something is typed; close it when cleared.
+			if (!this.supportsLocalSearch) {
+				this.showUnifiedSearch = this.queryText.length > 0
+			}
 		},
 	},
 
@@ -118,11 +131,14 @@ export default defineComponent({
 			emit('nextcloud:unified-search.search', { query })
 		})
 
+		// Read the header input element from the child so the modal's focus trap can include it
+		this.inputElement = (this.$refs.searchInput as { getInputElement?: () => HTMLElement | null })?.getInputElement?.() ?? null
+
 		// all done
 		logger.debug('Unified search initialized!')
 	},
 
-	beforeDestroy() {
+	beforeUnmount() {
 		// keep in mind to remove the event listener
 		window.removeEventListener('keydown', this.onKeyDown)
 	},
@@ -184,6 +200,8 @@ export default defineComponent({
 <style lang="scss" scoped>
 // this is needed to allow us overriding component styles (focus-visible)
 .unified-search-menu {
+	// Positioning context so the results popover can anchor under the input
+	position: relative;
 	display: flex;
 	align-items: center;
 	justify-content: center;
