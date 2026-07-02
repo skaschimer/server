@@ -14,11 +14,29 @@
 				@set:customDateRange="setCustomDateRange"
 				@update:isOpen="showDateRangeModal = $event" />
 
-			<div ref="panel" class="unified-search-modal-container">
+			<div ref="panel" class="unified-search-modal__container">
 				<!-- Unified search form -->
 				<div class="unified-search-modal__header">
+					<div v-if="isSmallMobile" class="unified-search-modal__mobile-input">
+						<NcTextField
+							type="search"
+							:label="t('core', 'Apps, files, messages, and more')"
+							:modelValue="searchQuery"
+							:showTrailingButton="searchQuery.length > 0"
+							:trailingButtonLabel="t('core', 'Clear search')"
+							@update:modelValue="onMobileSearchInput"
+							@trailing-button-click="searchQuery = ''" />
+						<NcButton
+							variant="tertiary"
+							:aria-label="t('core', 'Close search')"
+							@click="onUpdateOpen(false)">
+							<template #icon>
+								<IconClose :size="20" />
+							</template>
+						</NcButton>
+					</div>
 					<div class="unified-search-modal__filters" data-cy-unified-search-filters>
-						<NcActions v-model:open="providerActionMenuIsOpen" :menuName="t('core', 'Places')" data-cy-unified-search-filter="places">
+						<NcActions :open.sync="providerActionMenuIsOpen" :menu-name="t('core', 'Places')" data-cy-unified-search-filter="places">
 							<template #icon>
 								<IconListBox :size="20" />
 							</template>
@@ -35,7 +53,7 @@
 								{{ provider.name }}
 							</NcActionButton>
 						</NcActions>
-						<NcActions v-model:open="dateActionMenuIsOpen" :menuName="t('core', 'Date')" data-cy-unified-search-filter="date">
+						<NcActions :open.sync="dateActionMenuIsOpen" :menu-name="t('core', 'Date')" data-cy-unified-search-filter="date">
 							<template #icon>
 								<IconCalendarRange :size="20" />
 							</template>
@@ -182,28 +200,33 @@
 					</template>
 				</div>
 			</div>
-			<div class="unified-search-modal-scrim" @click="onUpdateOpen(false)" />
+			<div class="unified-search-modal__scrim" @click="onUpdateOpen(false)" />
 		</div>
 	</transition>
 </template>
 
 <script lang="ts">
+import type { FocusTrap } from 'focus-trap'
+
 import { subscribe } from '@nextcloud/event-bus'
 import { loadState } from '@nextcloud/initial-state'
 import { getCanonicalLocale, n, t } from '@nextcloud/l10n'
+import { useIsSmallMobile } from '@nextcloud/vue/composables/useIsMobile'
 import { useBrowserLocation } from '@vueuse/core'
 import debounce from 'debounce'
-import { type FocusTrap,createFocusTrap } from 'focus-trap'
-import { type PropType,defineComponent, markRaw } from 'vue'
+import { createFocusTrap } from 'focus-trap'
+import { defineComponent, markRaw } from 'vue'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActions from '@nextcloud/vue/components/NcActions'
 import NcAvatar from '@nextcloud/vue/components/NcAvatar'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import IconAccountGroup from 'vue-material-design-icons/AccountGroupOutline.vue'
 import IconArrowRight from 'vue-material-design-icons/ArrowRight.vue'
 import IconCalendarRange from 'vue-material-design-icons/CalendarRangeOutline.vue'
+import IconClose from 'vue-material-design-icons/Close.vue'
 import IconDotsHorizontal from 'vue-material-design-icons/DotsHorizontal.vue'
 import IconFilter from 'vue-material-design-icons/Filter.vue'
 import IconListBox from 'vue-material-design-icons/ListBox.vue'
@@ -222,6 +245,7 @@ export default defineComponent({
 		IconArrowRight,
 		IconAccountGroup,
 		IconCalendarRange,
+		IconClose,
 		IconDotsHorizontal,
 		IconFilter,
 		IconListBox,
@@ -235,6 +259,7 @@ export default defineComponent({
 		NcButton,
 		NcEmptyContent,
 		NcCheckboxRadioSwitch,
+		NcTextField,
 		SearchableList,
 		SearchResult,
 	},
@@ -263,14 +288,6 @@ export default defineComponent({
 			type: Boolean,
 			default: false,
 		},
-
-		/**
-		 * The header input element (lives in a sibling component), for the popover's focus trap
-		 */
-		inputElement: {
-			type: (null as unknown) as PropType<HTMLElement | null>,
-			default: null,
-		},
 	},
 
 	emits: ['update:open', 'update:query'],
@@ -281,11 +298,13 @@ export default defineComponent({
 		 */
 		const currentLocation = useBrowserLocation()
 		const searchStore = useSearchStore()
+		const isSmallMobile = useIsSmallMobile()
 		return {
 			t,
 
 			currentLocation,
 			externalFilters: searchStore.externalFilters,
+			isSmallMobile,
 		}
 	},
 
@@ -314,7 +333,6 @@ export default defineComponent({
 			results: [],
 			contacts: [],
 			showDateRangeModal: false,
-			internalIsVisible: this.open,
 			initialized: false,
 			searchExternalResources: false,
 			minSearchLength: loadState('unified-search', 'min-search-length', 1),
@@ -376,6 +394,12 @@ export default defineComponent({
 
 		hasContentFilters() {
 			return this.filters.some((filter) => filter.type === 'date' || filter.type === 'person')
+		},
+
+		// Any teleported overlay (a filter menu or the date-range dialog) that renders
+		// outside the focus trap and needs it paused while open.
+		isOverlayOpen() {
+			return this.providerActionMenuIsOpen || this.dateActionMenuIsOpen || this.showDateRangeModal
 		},
 
 		filteredResults() {
@@ -447,19 +471,7 @@ export default defineComponent({
 			}
 		},
 
-		// Filter menus and the date-range dialog teleport outside the trap; pause it
-		// while any is open so focus can move into them, then resume.
-		providerActionMenuIsOpen() {
-			this.toggleFocusTrapForOverlays()
-		},
-
-		dateActionMenuIsOpen() {
-			this.toggleFocusTrapForOverlays()
-		},
-
-		showDateRangeModal() {
-			this.toggleFocusTrapForOverlays()
-		},
+		isOverlayOpen: 'syncFocusTrapToOverlays',
 
 		query: {
 			immediate: true,
@@ -471,7 +483,12 @@ export default defineComponent({
 		searchQuery: {
 			handler() {
 				this.$emit('update:query', this.searchQuery)
-				this.debouncedFind(this.searchQuery)
+				// Only search while open: the query prop keeps flowing from the header even
+				// when closed (e.g. the local search bar on deck), so a hidden modal must
+				// not fire background searches.
+				if (this.open) {
+					this.debouncedFind(this.searchQuery)
+				}
 			},
 		},
 
@@ -500,6 +517,16 @@ export default defineComponent({
 		},
 
 		/**
+		 * NcTextField's `update:modelValue` is typed `string | number`; the search
+		 * query is always a string, so normalize here rather than casting in the template.
+		 *
+		 * @param value The new value from the mobile search field
+		 */
+		onMobileSearchInput(value: string | number) {
+			this.searchQuery = String(value)
+		},
+
+		/**
 		 * Close the search on Escape. Sub-menus / sub-dialogs (filter actions, the
 		 * date-range dialog) handle Escape themselves, so only close the popover
 		 * when none of them are open.
@@ -510,7 +537,7 @@ export default defineComponent({
 			if (event.key !== 'Escape') {
 				return
 			}
-			if (this.providerActionMenuIsOpen || this.dateActionMenuIsOpen || this.showDateRangeModal) {
+			if (this.isOverlayOpen) {
 				return
 			}
 			event.preventDefault()
@@ -529,13 +556,17 @@ export default defineComponent({
 			if (!panel) {
 				return
 			}
-			// focus-trap collects tabbables *inside* each container, not the container
-			// element itself. The bare <input> is a leaf, so pass its wrapper (which
-			// holds the input and the clear button); input first to match DOM order.
-			const inputContainer = (this.inputElement?.closest('.unified-search-input') ?? null) as HTMLElement | null
+			// focus-trap collects tabbables *inside* each container. The header input is
+			// in a sibling component under the shared .unified-search-menu ancestor, so we
+			// query its wrapper from the DOM at activation (not via a prop, which goes
+			// stale across the mobile/desktop input swap). Input container first for DOM order.
+			const menu = (this.$el as HTMLElement)?.closest?.('.unified-search-menu') ?? null
+			const inputContainer = (menu?.querySelector('.unified-search-input') ?? null) as HTMLElement | null
 			const containers = inputContainer ? [inputContainer, panel] : [panel]
 			this.focusTrap = markRaw(createFocusTrap(containers, {
-				initialFocus: this.inputElement ?? panel,
+				// Prefer the mobile search field (rendered inside the panel) when present;
+				// falls back to the header input, then the panel itself.
+				initialFocus: () => panel.querySelector('input[type="search"]') ?? inputContainer?.querySelector('input') ?? panel,
 				// We own closing via Escape (onEscapeKey) and scrim click
 				escapeDeactivates: false,
 				// Let scrim clicks reach their handler instead of being swallowed
@@ -552,15 +583,12 @@ export default defineComponent({
 			this.focusTrap = null
 		},
 
-		/**
-		 * Pause the trap while a teleported menu / dialog is open so focus can move
-		 * into it, and resume once they have all closed.
-		 */
-		toggleFocusTrapForOverlays() {
+		// Filter menus and the date-range dialog teleport outside the trap; pause it
+		// while any is open so focus can move into them, then resume once all close.
+		syncFocusTrapToOverlays(overlayOpen: boolean) {
 			if (!this.focusTrap) {
 				return
 			}
-			const overlayOpen = this.providerActionMenuIsOpen || this.dateActionMenuIsOpen || this.showDateRangeModal
 			if (overlayOpen) {
 				this.focusTrap.pause()
 			} else {
@@ -969,15 +997,17 @@ export default defineComponent({
 	position: absolute;
 	inset-block-start: 100%;
 	inset-inline: 0;
+	// One below the header input (z-index: 51) and above the page. !important wins
+	// the stacking cascade inside the themed #header.
 	z-index: 50 !important;
-	margin-block-start: 8px;
+	margin-block-start: 6px;
 	display: flex;
 	justify-content: center;
 }
 
 // Backdrop, mirrors NcModal's .modal-mask. Fixed so it covers the whole viewport
 // regardless of the anchored root.
-.unified-search-modal-scrim {
+.unified-search-modal__scrim {
 	position: fixed;
 	inset: 0;
 	z-index: 0;
@@ -987,7 +1017,7 @@ export default defineComponent({
 
 // Dialog panel: NcModal's "normal" chrome, but width-matched to the header input
 // and anchored under it, growing downward and scrolling internally when tall.
-.unified-search-modal-container {
+.unified-search-modal__container {
 	position: relative;
 	z-index: 1;
 	display: flex;
@@ -1005,13 +1035,24 @@ export default defineComponent({
 	background-color: var(--color-main-background);
 	color: var(--color-main-text);
 	box-shadow: 0 0 40px rgba(0, 0, 0, 0.2);
-	// The panel slides down into place; the enter/leave classes set the start offset
-	transition: transform 100ms ease-out;
+	// The panel slides down into place; the enter/leave classes set the start offset.
+	// Same easeOutQuart curve as the header input so the whole search UI moves in step.
+	transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 // Fullscreen on small viewports, mirrors NcModal's responsive breakpoint
 @media only screen and ((max-width: 512px) or (max-height: 400px)) {
-	.unified-search-modal-container {
+	.unified-search-modal-root {
+		// Fill the viewport below the header bar, leaving it visible and interactive
+		// (matches the previous unified search and the rest of the mobile chrome).
+		position: fixed;
+		inset-block-start: var(--header-height);
+		inset-inline: 0;
+		inset-block-end: 0;
+		margin-block-start: 0;
+	}
+
+	.unified-search-modal__container {
 		width: 100%;
 		max-width: initial;
 		height: 100%;
@@ -1031,9 +1072,22 @@ export default defineComponent({
 	opacity: 0;
 }
 
-.unified-search-modal-enter .unified-search-modal-container,
-.unified-search-modal-leave-to .unified-search-modal-container {
+.unified-search-modal-enter .unified-search-modal__container,
+.unified-search-modal-leave-to .unified-search-modal__container {
 	transform: translateY(-6px);
+}
+
+// Respect reduced-motion: keep the backdrop cross-fade (opacity is not motion) but
+// drop the panel slide so nothing moves on open/close.
+@media (prefers-reduced-motion: reduce) {
+	.unified-search-modal__container {
+		transition: none;
+	}
+
+	.unified-search-modal-enter .unified-search-modal__container,
+	.unified-search-modal-leave-to .unified-search-modal__container {
+		transform: none;
+	}
 }
 
 .unified-search-modal {
@@ -1047,6 +1101,17 @@ export default defineComponent({
 		// Make it sticky with the input margin for the label
 		position: sticky;
 		top: 6px;
+	}
+
+	&__mobile-input {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		margin-block-end: 8px;
+
+		:deep(.input-field) {
+			flex: 1 1 auto;
+		}
 	}
 
 	&__filters {

@@ -5,9 +5,9 @@
 <template>
 	<div class="unified-search-menu">
 		<UnifiedSearchInput
-			ref="searchInput"
 			:query="queryText"
 			:expanded="showUnifiedSearch || showLocalSearch"
+			@click="openModal"
 			@update:query="queryText = $event" />
 		<UnifiedSearchLocalSearchBar
 			v-if="supportsLocalSearch"
@@ -18,7 +18,6 @@
 			@update:query="queryText = $event" />
 		<UnifiedSearchModal
 			:localSearch="supportsLocalSearch"
-			:inputElement="inputElement"
 			:query="queryText"
 			:open="showUnifiedSearch"
 			@update:query="queryText = $event"
@@ -29,6 +28,7 @@
 <script lang="ts">
 import { emit, subscribe } from '@nextcloud/event-bus'
 import { t } from '@nextcloud/l10n'
+import { useIsSmallMobile } from '@nextcloud/vue/composables/useIsMobile'
 import { useBrowserLocation } from '@vueuse/core'
 import debounce from 'debounce'
 import { defineComponent } from 'vue'
@@ -48,9 +48,11 @@ export default defineComponent({
 
 	setup() {
 		const currentLocation = useBrowserLocation()
+		const isSmallMobile = useIsSmallMobile()
 
 		return {
 			currentLocation,
+			isSmallMobile,
 
 			t,
 		}
@@ -64,8 +66,6 @@ export default defineComponent({
 			showUnifiedSearch: false,
 			/** Open state of the local search bar */
 			showLocalSearch: false,
-			/** The header input element, read from the child and handed to the modal's focus trap */
-			inputElement: null as HTMLElement | null,
 		}
 	},
 
@@ -104,8 +104,9 @@ export default defineComponent({
 		 */
 		queryText() {
 			this.debouncedQueryUpdate()
-			// Open the search popover only once something is typed; close it when cleared.
-			if (!this.supportsLocalSearch) {
+			// Desktop opens/closes the popover as you type; mobile is driven by the
+			// header button + the modal close paths, so clearing must not collapse it.
+			if (!this.supportsLocalSearch && !this.isSmallMobile) {
 				this.showUnifiedSearch = this.queryText.length > 0
 			}
 		},
@@ -130,9 +131,6 @@ export default defineComponent({
 		subscribe('nextcloud:unified-search:search', ({ query }) => {
 			emit('nextcloud:unified-search.search', { query })
 		})
-
-		// Read the header input element from the child so the modal's focus trap can include it
-		this.inputElement = (this.$refs.searchInput as { getInputElement?: () => HTMLElement | null })?.getInputElement?.() ?? null
 
 		// all done
 		logger.debug('Unified search initialized!')

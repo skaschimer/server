@@ -8,7 +8,8 @@
 		:class="{ 'unified-search-input--mobile': isSmallMobile }">
 		<NcHeaderButton
 			v-if="isSmallMobile"
-			:aria-label="placeholderText"
+			id="unified-search-trigger"
+			:ariaLabel="placeholderText"
 			aria-haspopup="dialog"
 			:aria-expanded="expanded ? 'true' : 'false'"
 			@click="$emit('click', $event)">
@@ -20,14 +21,16 @@
 			v-else
 			class="unified-search-input__field"
 			:class="{ 'unified-search-input__field--active': isActive }">
-			<!-- Resting overlay: centred magnifier + placeholder, purely decorative.
-				A full-width input cannot group an icon with its own placeholder, so we
-				paint the resting look on top and let clicks fall through to the input. -->
-			<div class="unified-search-input__resting" aria-hidden="true">
+			<!-- Decorative overlay: an input can't group an icon with its own placeholder,
+				so we paint the magnifier + placeholder on top and let clicks fall through.
+				It slides to the leading edge on focus (see styles). -->
+			<div
+				class="unified-search-input__resting"
+				:class="{ 'unified-search-input__resting--filled': query.length > 0 }"
+				aria-hidden="true">
 				<IconMagnify :size="20" />
-				<span>{{ placeholderText }}</span>
+				<span class="unified-search-input__label">{{ placeholderText }}</span>
 			</div>
-			<IconMagnify class="unified-search-input__icon" :size="20" aria-hidden="true" />
 			<input
 				ref="inputRef"
 				type="text"
@@ -36,9 +39,8 @@
 				aria-autocomplete="list"
 				:aria-expanded="expanded ? 'true' : 'false'"
 				:aria-label="placeholderText"
-				:placeholder="isActive ? placeholderText : ''"
 				:value="query"
-				@focus="onFocus"
+				@focus="isFocused = true"
 				@blur="isFocused = false"
 				@input="onInput">
 			<NcButton
@@ -83,29 +85,17 @@ const props = defineProps<{
 
 const emit = defineEmits<{
 	click: [mouseEvent: MouseEvent]
-	focus: [focusEvent: FocusEvent]
 	'update:query': [query: string]
 }>()
 
 const isSmallMobile = useIsSmallMobile()
-const placeholderText = t('core', 'Search apps, files, tags, messages …')
+const placeholderText = t('core', 'Apps, files, messages, and more')
 
 const inputRef = ref<HTMLInputElement>()
 const isFocused = ref(false)
 
-/** Active = focused or holding a query; drives the input-vs-button styling. */
+/** Active = focused or holding a query; drives the resting-vs-active styling. */
 const isActive = computed(() => isFocused.value || props.query.length > 0)
-
-/**
- * Track focus for the active styling and bubble the event so the parent can
- * react to it.
- *
- * @param event The focus event
- */
-function onFocus(event: FocusEvent) {
-	isFocused.value = true
-	emit('focus', event)
-}
 
 /**
  * Relay the typed value upward.
@@ -121,15 +111,12 @@ function clearQuery() {
 	emit('update:query', '')
 	inputRef.value?.focus()
 }
-
-defineExpose({
-	getInputElement: (): HTMLInputElement | null => inputRef.value ?? null,
-})
 </script>
 
 <style lang="scss" scoped>
 .unified-search-input {
-	// Positioned so z-index applies and the input paints above the search scrim
+	// Paints above the modal root (z-index: 50) so the header input stays clickable
+	// over the scrim while the popover is open. Keep 51 one above that value.
 	position: relative;
 	z-index: 51;
 
@@ -147,7 +134,18 @@ defineExpose({
 	&__field {
 		--resting-background: rgba(0, 0, 0, 0.15);
 		--resting-background-hover: rgba(0, 0, 0, 0.22);
+		// Shared geometry: the resting group and the input's leading padding read the
+		// same tokens so the placeholder and the typed value line up.
+		--search-icon-pad: 12px;
+		--search-icon-size: 20px;
+		--search-icon-gap: 8px;
+		// One shared timing for every focus transition (background, the icon/label
+		// slide, the recolour) so they move together. easeOutQuart = soft landing.
+		--search-anim-duration: 240ms;
+		--search-anim-easing: cubic-bezier(0.22, 1, 0.36, 1);
 		position: relative;
+		// Query container so the resting group can centre itself with cqi units
+		container-type: inline-size;
 		display: flex;
 		align-items: center;
 		// Match the default clickable area so the inner <input> (which the global
@@ -160,7 +158,10 @@ defineExpose({
 		background-color: var(--resting-background);
 		-webkit-backdrop-filter: var(--filter-background-blur);
 		backdrop-filter: var(--filter-background-blur);
-		transition: background-color var(--animation-quick) ease-in-out;
+		// Blue tint -> white surface on the shared timing, in step with the slide.
+		transition:
+			background-color var(--search-anim-duration) var(--search-anim-easing),
+			box-shadow var(--search-anim-duration) var(--search-anim-easing);
 
 		&:hover:not(.unified-search-input__field--active) {
 			background-color: var(--resting-background-hover);
@@ -173,44 +174,53 @@ defineExpose({
 		}
 	}
 
-	// Resting look: magnifier + placeholder centred as a group, painted over the
-	// (empty, pointer-transparent) input. Fades out as the field becomes active.
+	// Anchored at the leading edge and translated to the centre while at rest; on
+	// focus (--active) the translate goes to 0 and it slides into place. Centre offset
+	// is pure CSS: half the field (50cqi) minus half the group (50%) minus the pad, so
+	// it self-corrects for any placeholder length or field width.
 	&__resting {
+		--slide-sign: 1;
 		position: absolute;
-		inset: 0;
+		inset-block: 0;
+		inset-inline-start: var(--search-icon-pad);
+		max-width: calc(100% - 2 * var(--search-icon-pad));
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		padding-inline: 12px;
+		gap: var(--search-icon-gap);
 		pointer-events: none;
 		color: color-mix(in srgb, var(--color-background-plain-text) 70%, var(--color-background-plain));
-		transition: opacity var(--animation-quick) ease-in-out;
-
-		span {
-			overflow: hidden;
-			white-space: nowrap;
-			text-overflow: ellipsis;
-		}
+		transform: translateX(calc(var(--slide-sign) * (50cqi - 50% - var(--search-icon-pad))));
+		transition:
+			transform var(--search-anim-duration) var(--search-anim-easing),
+			color var(--search-anim-duration) var(--search-anim-easing);
 
 		.unified-search-input__field--active & {
-			opacity: 0;
+			transform: translateX(0);
+			color: var(--color-text-maxcontrast);
 		}
 	}
 
-	// Left magnifier for the active state; hidden while the resting overlay shows
-	&__icon {
-		position: absolute;
-		inset-inline-start: 12px;
-		display: flex;
-		color: var(--color-main-text);
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity var(--animation-quick) ease-in-out;
+	// Placeholder text inside the resting group. Ellipsised, and hidden once typing
+	// starts so it doesn't overlap the value. Scoped to the label class so the sibling
+	// magnifier (also rendered as a <span>) stays visible.
+	&__label {
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		transition: opacity var(--search-anim-duration) var(--search-anim-easing);
+	}
 
-		.unified-search-input__field--active & {
-			opacity: 1;
-		}
+	&__resting--filled &__label {
+		opacity: 0;
+	}
+
+	// The material-design icon <svg> is inline (baseline-aligned), which leaves a
+	// descender gap and makes the glyph sit high even when its box is centred.
+	// Render it as a block so it fills its box, then nudge 1px down to sit on the
+	// text's optical centre (a geometrically centred glyph reads slightly high).
+	&__resting :deep(.material-design-icon__svg) {
+		display: block;
+		transform: translateY(1px);
 	}
 
 	// Only visible once active (at rest it's empty and covered by the overlay),
@@ -220,8 +230,9 @@ defineExpose({
 		min-width: 0;
 		height: 100%;
 		margin: 0;
-		// Leading space for the active magnifier
-		padding-inline: calc(var(--default-clickable-area) - var(--default-grid-baseline)) 12px;
+		// Leading space so the placeholder/value starts one gap past the magnifier,
+		// matching the resting group exactly. Trailing padding mirrors the leading pad.
+		padding-inline: calc(var(--search-icon-pad) + var(--search-icon-size) + var(--search-icon-gap)) var(--search-icon-pad);
 		// Opt out of NC's global input chrome (core/css/inputs.scss adds a border,
 		// radius and focus box-shadow to any text input not in its exclusion list).
 		// !important because that global focus rule outweighs a scoped class.
@@ -254,6 +265,21 @@ defineExpose({
 [data-theme-dark-highcontrast] .unified-search-input__field {
 	--resting-background: color-mix(in srgb, var(--color-primary-element) 16%, transparent);
 	--resting-background-hover: color-mix(in srgb, var(--color-primary-element) 22%, transparent);
+}
+
+// translateX is physical, so flip the resting slide under RTL to keep it moving
+// toward the leading (right) edge.
+[dir=rtl] .unified-search-input__resting {
+	--slide-sign: -1;
+}
+
+// Respect reduced-motion: keep the end states but drop the slide/fade so nothing
+// animates on focus.
+@media (prefers-reduced-motion: reduce) {
+	.unified-search-input__resting,
+	.unified-search-input__resting span {
+		transition: none;
+	}
 }
 
 // Mobile: NcHeaderButton styling to match the other header items
