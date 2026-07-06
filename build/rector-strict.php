@@ -47,7 +47,7 @@ return (require __DIR__ . '/rector-shared.php')
 		symfonyCodeQuality: true,
 		symfonyConfigs: true,
 	)->withPhpSets(
-		php82: true,
+		php83: true,
 	)->withSkip([
 		AddSeeTestAnnotationRector::class,
 	]);
