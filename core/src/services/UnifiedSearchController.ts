@@ -1,6 +1,8 @@
+import { search as unifiedSearch } from './UnifiedSearchService.js'
+
 type SearchItemStatus = 'loading' | 'loaded' | 'failed' | 'blocked'
 
-import { search as unifiedSearch } from './UnifiedSearchService.js'
+export const REVEAL_INTERVAL = 1500 // milliseconds
 
 type CategorySearchItem = {
 	status: SearchItemStatus
@@ -12,11 +14,13 @@ type CategorySearchItem = {
 export class UnifiedSearchController {
 	private searchItems: Record<string, CategorySearchItem> = {}
 	private requestId: number = 0
-	constructor() {}
+	private revealTimer: ReturnType<typeof setTimeout> | null = null
 
 	search(query: string, categories: string[]): void {
 		this.requestId++
 		const dispatchId = this.requestId
+
+		this.startRevealTimer()
 
 		categories.forEach((category) => {
 			this.searchItems[category] = {
@@ -70,6 +74,14 @@ export class UnifiedSearchController {
 		})
 	}
 
+	unblockAllCategories(categories: string[]): void {
+		categories.forEach((category) => {
+			if (this.searchItems[category].status === 'blocked') {
+				this.searchItems[category].status = 'loaded'
+			}
+		})
+	}
+
 	categoryShouldBlock(category: string, categories: string[]): boolean {
 		const categoryItem = this.searchItems[category]
 		if (!categoryItem) {
@@ -80,6 +92,20 @@ export class UnifiedSearchController {
 			const item = this.searchItems[c]
 			return item && ['loading', 'blocked'].includes(item.status)
 		})
+	}
+
+	startRevealTimer(): void {
+		if (this.revealTimer) {
+			clearTimeout(this.revealTimer)
+		}
+		this.revealTimer = setTimeout(() => {
+			const categories = Object.keys(this.searchItems)
+			const hasPendingCategories = categories.some((category) => ['loading', 'blocked'].includes(this.searchItems[category].status))
+			this.unblockAllCategories(categories)
+			if (hasPendingCategories) {
+				this.startRevealTimer()
+			}
+		}, REVEAL_INTERVAL)
 	}
 
 	getSnapshot(): Record<string, CategorySearchItem> {
