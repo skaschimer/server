@@ -56,225 +56,251 @@ afterEach(() => {
 })
 
 describe('UnifiedSearchController', () => {
-	it('sets loading state on all categories when a search is started', async () => {
-		service.search.mockImplementation(() => deferredProvider())
+	describe('loading state', () => {
+		it('sets loading state on all categories when a search is started', async () => {
+			service.search.mockImplementation(() => deferredProvider())
 
-		const searchController = new UnifiedSearchController()
-		searchController.search('query', ['files', 'talk'])
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk'])
 
-		expect(searchController.getSnapshot()).toEqual({
-			files: loading,
-			talk: loading,
+			expect(searchController.getSnapshot()).toEqual({
+				files: loading,
+				talk: loading,
+			})
+		})
+
+		it('returns the results for a single category', async () => {
+			const results = deferredProvider()
+			service.search.mockReturnValueOnce(results)
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files'])
+
+			results.resolve(['Some result'])
+
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot()).toEqual({
+				files: { status: 'loaded', entries: ['Some result'], cursor: undefined, hasMore: undefined },
+			})
 		})
 	})
 
-	it('returns the results for a single category', async () => {
-		const results = deferredProvider()
-		service.search.mockReturnValueOnce(results)
+	describe('ordering and blocking', () => {
+		it('marks category as blocked if it arrived out of order', async () => {
+			const providers = mockProviders(['files', 'talk', 'deck'])
 
-		const searchController = new UnifiedSearchController()
-		searchController.search('query', ['files'])
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk', 'deck'])
 
-		results.resolve(['Some result'])
+			providers.deck.resolve(['Deck result'])
 
-		await vi.advanceTimersByTimeAsync(0)
+			await vi.advanceTimersByTimeAsync(0)
 
-		expect(searchController.getSnapshot()).toEqual({
-			files: { status: 'loaded', entries: ['Some result'], cursor: undefined, hasMore: undefined },
+			expect(searchController.getSnapshot()).toEqual({
+				files: loading,
+				talk: loading,
+				deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			})
+		})
+
+		it('marks category as loaded if it is unblocked (i.e., previous categories are loaded)', async () => {
+			const providers = mockProviders(['files', 'talk', 'deck'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk', 'deck'])
+
+			providers.deck.resolve(['Deck result'])
+
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot()).toEqual({
+				files: loading,
+				talk: loading,
+				deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			})
+
+			providers.files.resolve(['Files result'])
+			providers.talk.resolve(['Talk result'])
+
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot()).toEqual({
+				files: { status: 'loaded', entries: ['Files result'], cursor: undefined, hasMore: undefined },
+				talk: { status: 'loaded', entries: ['Talk result'], cursor: undefined, hasMore: undefined },
+				deck: { status: 'loaded', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			})
+		})
+
+		it('does not change the status of a category that has failed', async () => {
+			const providers = mockProviders(['files', 'talk', 'deck'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk', 'deck'])
+
+			providers.talk.resolve(['Talk result'])
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot()).toEqual({
+				files: loading,
+				talk: { status: 'blocked', entries: ['Talk result'], cursor: undefined, hasMore: undefined },
+				deck: loading,
+			})
+
+			// Ensure that we also reconcile status on failure.
+			// This is important because a category that has failed may have been blocking
+			// other categories, and if it fails, those categories should be unblocked.
+			providers.files.reject(['Files result'])
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot()).toEqual({
+				files: { status: 'failed', entries: [], cursor: null, hasMore: false },
+				talk: { status: 'loaded', entries: ['Talk result'], cursor: undefined, hasMore: undefined },
+				deck: loading,
+			})
 		})
 	})
 
-	it('marks category as blocked if it arrived out of order', async () => {
-		const providers = mockProviders(['files', 'talk', 'deck'])
+	describe('stale search guard', () => {
+		it('ignores a stale response from a superseded search', async () => {
+			const first = mockProviders(['files', 'talk'])
 
-		const searchController = new UnifiedSearchController()
-		searchController.search('query', ['files', 'talk', 'deck'])
+			const searchController = new UnifiedSearchController()
+			searchController.search('first', ['files', 'talk'])
 
-		providers.deck.resolve(['Deck result'])
+			// A newer search supersedes the first before it resolves.
+			const second = mockProviders(['files', 'talk'])
+			searchController.search('second', ['files', 'talk'])
 
-		await vi.advanceTimersByTimeAsync(0)
+			// The stale (first) responses arrive late and must be ignored.
+			first.files.resolve(['Stale files'])
+			first.talk.resolve(['Stale talk'])
+			await vi.advanceTimersByTimeAsync(0)
 
-		expect(searchController.getSnapshot()).toEqual({
-			files: loading,
-			talk: loading,
-			deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			// State still reflects the second search: both categories pending.
+			expect(searchController.getSnapshot()).toEqual({
+				files: loading,
+				talk: loading,
+			})
+
+			// The live (second) search still resolves normally.
+			second.files.resolve(['Live files'])
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot().files).toEqual({
+				status: 'loaded',
+				entries: ['Live files'],
+				cursor: undefined,
+				hasMore: undefined,
+			})
 		})
 	})
 
-	it('marks category as loaded if it is unblocked (i.e., previous categories are loaded)', async () => {
-		const providers = mockProviders(['files', 'talk', 'deck'])
+	describe('resetting between searches', () => {
+		it('drops categories that are not part of a newer, narrower search', async () => {
+			mockProviders(['files', 'talk', 'deck'])
 
-		const searchController = new UnifiedSearchController()
-		searchController.search('query', ['files', 'talk', 'deck'])
+			const searchController = new UnifiedSearchController()
+			searchController.search('first', ['files', 'talk', 'deck'])
 
-		providers.deck.resolve(['Deck result'])
+			// A narrower search replaces the first. The dropped categories must
+			// not linger in the snapshot.
+			mockProviders(['files'])
+			searchController.search('second', ['files'])
 
-		await vi.advanceTimersByTimeAsync(0)
-
-		expect(searchController.getSnapshot()).toEqual({
-			files: loading,
-			talk: loading,
-			deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
-		})
-
-		providers.files.resolve(['Files result'])
-		providers.talk.resolve(['Talk result'])
-
-		await vi.advanceTimersByTimeAsync(0)
-
-		expect(searchController.getSnapshot()).toEqual({
-			files: { status: 'loaded', entries: ['Files result'], cursor: undefined, hasMore: undefined },
-			talk: { status: 'loaded', entries: ['Talk result'], cursor: undefined, hasMore: undefined },
-			deck: { status: 'loaded', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			expect(searchController.getSnapshot()).toEqual({
+				files: loading,
+			})
 		})
 	})
 
-	it('does not change the status of a category that has failed', async () => {
-		const providers = mockProviders(['files', 'talk', 'deck'])
+	describe('reveal timer', () => {
+		it('marks blocked categories as loaded after a certain amount of time has elapsed', async () => {
+			const providers = mockProviders(['files', 'talk', 'deck'])
 
-		const searchController = new UnifiedSearchController()
-		searchController.search('query', ['files', 'talk', 'deck'])
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk', 'deck'])
 
-		providers.talk.resolve(['Talk result'])
-		await vi.advanceTimersByTimeAsync(0)
+			providers.deck.resolve(['Deck result'])
 
-		expect(searchController.getSnapshot()).toEqual({
-			files: loading,
-			talk: { status: 'blocked', entries: ['Talk result'], cursor: undefined, hasMore: undefined },
-			deck: loading,
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot()).toEqual({
+				files: loading,
+				talk: loading,
+				deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			})
+
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+
+			expect(searchController.getSnapshot()).toEqual({
+				files: loading,
+				talk: loading,
+				deck: { status: 'loaded', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			})
 		})
 
-		// Ensure that we also reconcile status on failure.
-		// This is important because a category that has failed may have been blocking
-		// other categories, and if it fails, those categories should be unblocked.
-		providers.files.reject(['Files result'])
-		await vi.advanceTimersByTimeAsync(0)
+		it('keeps flushing on later timer cycles while categories are still loading', async () => {
+			const providers = mockProviders(['files', 'talk', 'deck'])
 
-		expect(searchController.getSnapshot()).toEqual({
-			files: { status: 'failed', entries: [], cursor: null, hasMore: false },
-			talk: { status: 'loaded', entries: ['Talk result'], cursor: undefined, hasMore: undefined },
-			deck: loading,
-		})
-	})
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk', 'deck'])
 
-	it('ignores a stale response from a superseded search', async () => {
-		const first = mockProviders(['files', 'talk'])
+			// deck arrives out of order and is revealed by the first flush.
+			providers.deck.resolve(['Deck result'])
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+			expect(searchController.getSnapshot().deck.status).toBe('loaded')
 
-		const searchController = new UnifiedSearchController()
-		searchController.search('first', ['files', 'talk'])
+			// A later flush passes with nothing blocked while files/talk keep loading.
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
 
-		// A newer search supersedes the first before it resolves.
-		const second = mockProviders(['files', 'talk'])
-		searchController.search('second', ['files', 'talk'])
+			// talk now arrives out of order (files still loading) and is blocked.
+			providers.talk.resolve(['Talk result'])
+			await vi.advanceTimersByTimeAsync(0)
+			expect(searchController.getSnapshot().talk.status).toBe('blocked')
 
-		// The stale (first) responses arrive late and must be ignored.
-		first.files.resolve(['Stale files'])
-		first.talk.resolve(['Stale talk'])
-		await vi.advanceTimersByTimeAsync(0)
-
-		// State still reflects the second search: both categories pending.
-		expect(searchController.getSnapshot()).toEqual({
-			files: loading,
-			talk: loading,
+			// The timer must still be running to flush talk on a later cycle.
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+			expect(searchController.getSnapshot().talk.status).toBe('loaded')
 		})
 
-		// The live (second) search still resolves normally.
-		second.files.resolve(['Live files'])
-		await vi.advanceTimersByTimeAsync(0)
+		it('stops the reveal timer once every category has resolved', async () => {
+			const providers = mockProviders(['files', 'talk'])
 
-		expect(searchController.getSnapshot().files).toEqual({
-			status: 'loaded',
-			entries: ['Live files'],
-			cursor: undefined,
-			hasMore: undefined,
-		})
-	})
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk'])
 
-	it('marks blocked categories as loaded after a certain amount of time has elapsed', async () => {
-		const providers = mockProviders(['files', 'talk', 'deck'])
+			providers.files.resolve(['Files result'])
+			providers.talk.resolve(['Talk result'])
+			await vi.advanceTimersByTimeAsync(0)
 
-		const searchController = new UnifiedSearchController()
-		searchController.search('query', ['files', 'talk', 'deck'])
-
-		providers.deck.resolve(['Deck result'])
-
-		await vi.advanceTimersByTimeAsync(0)
-
-		expect(searchController.getSnapshot()).toEqual({
-			files: loading,
-			talk: loading,
-			deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			// Nothing is loading or blocked, so the next flush should not re-arm.
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+			expect(vi.getTimerCount()).toBe(0)
 		})
 
-		await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+		it('does not let a previous search\'s reveal timer fire against a new search', async () => {
+			const first = mockProviders(['files', 'talk', 'deck'])
 
-		expect(searchController.getSnapshot()).toEqual({
-			files: loading,
-			talk: loading,
-			deck: { status: 'loaded', entries: ['Deck result'], cursor: undefined, hasMore: undefined },
+			const searchController = new UnifiedSearchController()
+			searchController.search('first', ['files', 'talk', 'deck'])
+
+			// First search: deck is blocked and its reveal timer is pending.
+			first.deck.resolve(['First deck'])
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL - 500)
+			expect(searchController.getSnapshot().deck.status).toBe('blocked')
+
+			// A new search starts before the first timer fires. It must clear that
+			// timer, otherwise the stale flush would reveal the new search's deck early.
+			const second = mockProviders(['files', 'talk', 'deck'])
+			searchController.search('second', ['files', 'talk', 'deck'])
+
+			second.deck.resolve(['Second deck'])
+			// Advance past when the first search's timer would have fired (500ms from
+			// now) but before the second search's timer is due.
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL - 500)
+
+			expect(searchController.getSnapshot().deck.status).toBe('blocked')
 		})
-	})
-
-	it('keeps flushing on later timer cycles while categories are still loading', async () => {
-		const providers = mockProviders(['files', 'talk', 'deck'])
-
-		const searchController = new UnifiedSearchController()
-		searchController.search('query', ['files', 'talk', 'deck'])
-
-		// deck arrives out of order and is revealed by the first flush.
-		providers.deck.resolve(['Deck result'])
-		await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
-		expect(searchController.getSnapshot().deck.status).toBe('loaded')
-
-		// A later flush passes with nothing blocked while files/talk keep loading.
-		await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
-
-		// talk now arrives out of order (files still loading) and is blocked.
-		providers.talk.resolve(['Talk result'])
-		await vi.advanceTimersByTimeAsync(0)
-		expect(searchController.getSnapshot().talk.status).toBe('blocked')
-
-		// The timer must still be running to flush talk on a later cycle.
-		await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
-		expect(searchController.getSnapshot().talk.status).toBe('loaded')
-	})
-
-	it('stops the reveal timer once every category has resolved', async () => {
-		const providers = mockProviders(['files', 'talk'])
-
-		const searchController = new UnifiedSearchController()
-		searchController.search('query', ['files', 'talk'])
-
-		providers.files.resolve(['Files result'])
-		providers.talk.resolve(['Talk result'])
-		await vi.advanceTimersByTimeAsync(0)
-
-		// Nothing is loading or blocked, so the next flush should not re-arm.
-		await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
-		expect(vi.getTimerCount()).toBe(0)
-	})
-
-	it('does not let a previous search\'s reveal timer fire against a new search', async () => {
-		const first = mockProviders(['files', 'talk', 'deck'])
-
-		const searchController = new UnifiedSearchController()
-		searchController.search('first', ['files', 'talk', 'deck'])
-
-		// First search: deck is blocked and its reveal timer is pending.
-		first.deck.resolve(['First deck'])
-		await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL - 500)
-		expect(searchController.getSnapshot().deck.status).toBe('blocked')
-
-		// A new search starts before the first timer fires. It must clear that
-		// timer, otherwise the stale flush would reveal the new search's deck early.
-		const second = mockProviders(['files', 'talk', 'deck'])
-		searchController.search('second', ['files', 'talk', 'deck'])
-
-		second.deck.resolve(['Second deck'])
-		// Advance past when the first search's timer would have fired (500ms from
-		// now) but before the second search's timer is due.
-		await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL - 500)
-
-		expect(searchController.getSnapshot().deck.status).toBe('blocked')
 	})
 })

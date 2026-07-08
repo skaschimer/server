@@ -17,6 +17,7 @@ export class UnifiedSearchController {
 	private revealTimer: ReturnType<typeof setTimeout> | null = null
 
 	search(query: string, categories: string[]): void {
+		this.searchItems = {}
 		this.requestId++
 		const dispatchId = this.requestId
 
