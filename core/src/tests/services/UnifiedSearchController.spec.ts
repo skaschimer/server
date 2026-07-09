@@ -214,6 +214,50 @@ describe('UnifiedSearchController', () => {
 		})
 	})
 
+	describe('cancellation', () => {
+		it('cancels the previous search\'s in-flight requests when a new search starts', () => {
+			const first = mockProviders(['files', 'talk'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('first', ['files', 'talk'])
+
+			// A new search supersedes the first while its requests are in flight.
+			mockProviders(['files', 'talk'])
+			searchController.search('second', ['files', 'talk'])
+
+			expect(first.files.cancel).toHaveBeenCalledOnce()
+			expect(first.talk.cancel).toHaveBeenCalledOnce()
+		})
+	})
+
+	describe('dispose', () => {
+		it('cancels in-flight requests when disposed', () => {
+			const providers = mockProviders(['files', 'talk'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk'])
+
+			searchController.dispose()
+
+			expect(providers.files.cancel).toHaveBeenCalledOnce()
+			expect(providers.talk.cancel).toHaveBeenCalledOnce()
+		})
+
+		it('stops the reveal timer when disposed', () => {
+			mockProviders(['files', 'talk'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk'])
+
+			// A search arms the reveal timer.
+			expect(vi.getTimerCount()).toBe(1)
+
+			searchController.dispose()
+
+			expect(vi.getTimerCount()).toBe(0)
+		})
+	})
+
 	describe('reveal timer', () => {
 		it('marks blocked categories as loaded after a certain amount of time has elapsed', async () => {
 			const providers = mockProviders(['files', 'talk', 'deck'])
