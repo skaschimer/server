@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { REVEAL_INTERVAL, UnifiedSearchController } from '../../services/UnifiedSearchController.ts'
+import { REVEAL_INTERVAL_MS, UnifiedSearchController } from '../../services/UnifiedSearchController.ts'
 
 const service = vi.hoisted(() => ({
 	search: vi.fn(),
@@ -215,6 +215,34 @@ describe('UnifiedSearchController', () => {
 				loadMoreFailed: false,
 			})
 		})
+
+		it('ignores a stale response for a category the newer search dropped', async () => {
+			const first = mockProviders(['files', 'talk'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('first', ['files', 'talk'])
+
+			// A newer search with a completely different category set supersedes it.
+			const second = mockProviders(['deck'])
+			searchController.search('second', ['deck'])
+
+			// The stale response is for 'files', which no longer exists in the
+			// current search. Reconciling it must not throw on the missing category.
+			first.files.resolve(['Stale files'])
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot()).toEqual({
+				deck: loading,
+			})
+
+			// The live search still resolves normally.
+			second.deck.resolve(['Live deck'])
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(searchController.getSnapshot()).toEqual({
+				deck: { status: 'loaded', entries: ['Live deck'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+			})
+		})
 	})
 
 	describe('resetting between searches', () => {
@@ -416,7 +444,7 @@ describe('UnifiedSearchController', () => {
 				deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
 			})
 
-			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS)
 
 			expect(searchController.getSnapshot()).toEqual({
 				files: loading,
@@ -433,11 +461,11 @@ describe('UnifiedSearchController', () => {
 
 			// deck arrives out of order and is revealed by the first flush.
 			providers.deck.resolve(['Deck result'])
-			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS)
 			expect(searchController.getSnapshot().deck.status).toBe('loaded')
 
 			// A later flush passes with nothing blocked while files/talk keep loading.
-			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS)
 
 			// talk now arrives out of order (files still loading) and is blocked.
 			providers.talk.resolve(['Talk result'])
@@ -445,7 +473,7 @@ describe('UnifiedSearchController', () => {
 			expect(searchController.getSnapshot().talk.status).toBe('blocked')
 
 			// The timer must still be running to flush talk on a later cycle.
-			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS)
 			expect(searchController.getSnapshot().talk.status).toBe('loaded')
 		})
 
@@ -460,7 +488,7 @@ describe('UnifiedSearchController', () => {
 			await vi.advanceTimersByTimeAsync(0)
 
 			// Nothing is loading or blocked, so the next flush should not re-arm.
-			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL)
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS)
 			expect(vi.getTimerCount()).toBe(0)
 		})
 
@@ -472,7 +500,7 @@ describe('UnifiedSearchController', () => {
 
 			// First search: deck is blocked and its reveal timer is pending.
 			first.deck.resolve(['First deck'])
-			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL - 500)
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS - 500)
 			expect(searchController.getSnapshot().deck.status).toBe('blocked')
 
 			// A new search starts before the first timer fires. It must clear that
@@ -483,7 +511,7 @@ describe('UnifiedSearchController', () => {
 			second.deck.resolve(['Second deck'])
 			// Advance past when the first search's timer would have fired (500ms from
 			// now) but before the second search's timer is due.
-			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL - 500)
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS - 500)
 
 			expect(searchController.getSnapshot().deck.status).toBe('blocked')
 		})

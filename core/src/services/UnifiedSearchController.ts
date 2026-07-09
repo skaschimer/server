@@ -1,16 +1,21 @@
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 import { search as unifiedSearch } from './UnifiedSearchService.js'
 
 type CategorySearchStatus = 'loading' | 'loaded' | 'failed' | 'blocked'
 
-export const REVEAL_INTERVAL = 1500 // milliseconds
-
-type CategorySearchState = {
+interface CategorySearchState {
 	status: CategorySearchStatus
 	entries: unknown[]
 	cursor: string | null
 	hasMore: boolean
 	loadMoreFailed: boolean
 }
+
+export const REVEAL_INTERVAL_MS = 1500
 
 /**
  * Runs a unified search across categories in priority order, blocking
@@ -28,8 +33,9 @@ export class UnifiedSearchController {
 	 *
 	 * @param query the search term
 	 * @param categories category ids in priority order
+	 * @return resolves once every category has settled
 	 */
-	search(query: string, categories: string[]): void {
+	async search(query: string, categories: string[]): Promise<void> {
 		this.cancelPendingRequests()
 		this.searchStates = {}
 		this.searchGeneration++
@@ -38,52 +44,7 @@ export class UnifiedSearchController {
 
 		this.startRevealTimer()
 
-		categories.forEach((category) => {
-			this.searchStates[category] = {
-				status: 'loading',
-				entries: [],
-				cursor: null,
-				hasMore: false,
-				loadMoreFailed: false,
-			}
-			const { request, cancel } = unifiedSearch({
-				type: category,
-				query: this.query,
-				cursor: null,
-			})
-
-			this.pendingCancels.push(cancel)
-
-			request().then((response) => {
-				if (this.searchGeneration !== generation) {
-					// A new search has been started, ignore this result
-					return
-				}
-
-				const { entries, cursor, hasMore } = response.data.ocs.data
-				this.searchStates[category] = {
-					status: 'loaded',
-					entries,
-					cursor,
-					hasMore,
-					loadMoreFailed: false,
-				}
-
-				this.reconcileCategoryStatuses(categories)
-			}).catch(() => {
-				if (this.searchGeneration !== generation) {
-					return
-				}
-				this.searchStates[category] = {
-					status: 'failed',
-					entries: [],
-					cursor: null,
-					hasMore: false,
-					loadMoreFailed: false,
-				}
-				this.reconcileCategoryStatuses(categories)
-			})
-		})
+		await Promise.allSettled(categories.map((category) => this.searchCategory(category, generation, categories)))
 	}
 
 	/**
@@ -93,7 +54,7 @@ export class UnifiedSearchController {
 	 *
 	 * @param category the category id to page
 	 */
-	loadMore(category: string): void {
+	async loadMore(category: string): Promise<void> {
 		const generation = this.searchGeneration
 		const categoryState = this.searchStates[category]
 		if (!categoryState || !categoryState.hasMore || categoryState.status !== 'loaded') {
@@ -110,7 +71,8 @@ export class UnifiedSearchController {
 
 		this.pendingCancels.push(cancel)
 
-		request().then((response) => {
+		try {
+			const response = await request()
 			if (this.searchGeneration !== generation) {
 				return
 			}
@@ -118,14 +80,14 @@ export class UnifiedSearchController {
 			categoryState.entries.push(...entries)
 			categoryState.cursor = cursor
 			categoryState.hasMore = hasMore
-			categoryState.status = 'loaded'
-		}).catch(() => {
+		} catch {
 			if (this.searchGeneration !== generation) {
 				return
 			}
-			categoryState.status = 'loaded'
 			categoryState.loadMoreFailed = true
-		})
+		}
+
+		categoryState.status = 'loaded'
 	}
 
 	/**
@@ -143,6 +105,53 @@ export class UnifiedSearchController {
 	dispose(): void {
 		this.cancelPendingRequests()
 		this.stopRevealTimer()
+	}
+
+	private async searchCategory(category: string, generation: number, categories: string[]): Promise<void> {
+		this.searchStates[category] = {
+			status: 'loading',
+			entries: [],
+			cursor: null,
+			hasMore: false,
+			loadMoreFailed: false,
+		}
+		const { request, cancel } = unifiedSearch({
+			type: category,
+			query: this.query,
+			cursor: null,
+		})
+
+		this.pendingCancels.push(cancel)
+
+		try {
+			const response = await request()
+			if (this.searchGeneration !== generation) {
+				// A new search has been started, ignore this result
+				return
+			}
+
+			const { entries, cursor, hasMore } = response.data.ocs.data
+			this.searchStates[category] = {
+				status: 'loaded',
+				entries,
+				cursor,
+				hasMore,
+				loadMoreFailed: false,
+			}
+		} catch {
+			if (this.searchGeneration !== generation) {
+				return
+			}
+			this.searchStates[category] = {
+				status: 'failed',
+				entries: [],
+				cursor: null,
+				hasMore: false,
+				loadMoreFailed: false,
+			}
+		}
+
+		this.reconcileCategoryStatuses(categories)
 	}
 
 	private reconcileCategoryStatuses(categories: string[]): void {
@@ -163,7 +172,7 @@ export class UnifiedSearchController {
 			if (hasPendingCategories) {
 				this.startRevealTimer()
 			}
-		}, REVEAL_INTERVAL)
+		}, REVEAL_INTERVAL_MS)
 	}
 
 	private stopRevealTimer(): void {
