@@ -9,6 +9,7 @@ type CategorySearchItem = {
 	entries: unknown[]
 	cursor: string | null
 	hasMore: boolean
+	loadMoreFailed: boolean
 }
 
 /**
@@ -16,6 +17,7 @@ type CategorySearchItem = {
  * lower-priority results until their predecessors arrive or a timer reveals them.
  */
 export class UnifiedSearchController {
+	private query: string = ''
 	private searchItems: Record<string, CategorySearchItem> = {}
 	private requestId: number = 0
 	private revealTimer: ReturnType<typeof setTimeout> | null = null
@@ -32,6 +34,7 @@ export class UnifiedSearchController {
 		this.searchItems = {}
 		this.requestId++
 		const dispatchId = this.requestId
+		this.query = query
 
 		this.startRevealTimer()
 
@@ -41,10 +44,11 @@ export class UnifiedSearchController {
 				entries: [],
 				cursor: null,
 				hasMore: false,
+				loadMoreFailed: false,
 			}
 			const { request, cancel } = unifiedSearch({
 				type: category,
-				query,
+				query: this.query,
 				cursor: null,
 			})
 
@@ -62,6 +66,7 @@ export class UnifiedSearchController {
 					entries,
 					cursor,
 					hasMore,
+					loadMoreFailed: false,
 				}
 
 				this.reconcileCategoryStatuses(categories)
@@ -74,9 +79,52 @@ export class UnifiedSearchController {
 					entries: [],
 					cursor: null,
 					hasMore: false,
+					loadMoreFailed: false,
 				}
 				this.reconcileCategoryStatuses(categories)
 			})
+		})
+	}
+
+	/**
+	 * Fetch the next page for one category and append it. A no-op unless the
+	 * category is loaded with more pages. On failure the existing results stay
+	 * and `loadMoreFailed` is raised, so calling again retries.
+	 *
+	 * @param category the category id to page
+	 */
+	loadMore(category: string): void {
+		const dispatchId = this.requestId
+		const categoryItem = this.searchItems[category]
+		if (!categoryItem || !categoryItem.hasMore || categoryItem.status !== 'loaded') {
+			return
+		}
+		categoryItem.status = 'loading'
+		categoryItem.loadMoreFailed = false
+
+		const { request, cancel } = unifiedSearch({
+			type: category,
+			query: this.query,
+			cursor: categoryItem.cursor,
+		})
+
+		this.searchAbortHandlers.push(cancel)
+
+		request().then((response) => {
+			if (this.requestId !== dispatchId) {
+				return
+			}
+			const { entries, cursor, hasMore } = response.data.ocs.data
+			categoryItem.entries.push(...entries)
+			categoryItem.cursor = cursor
+			categoryItem.hasMore = hasMore
+			categoryItem.status = 'loaded'
+		}).catch(() => {
+			if (this.requestId !== dispatchId) {
+				return
+			}
+			categoryItem.status = 'loaded'
+			categoryItem.loadMoreFailed = true
 		})
 	}
 
