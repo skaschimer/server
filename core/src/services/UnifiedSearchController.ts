@@ -1,11 +1,11 @@
 import { search as unifiedSearch } from './UnifiedSearchService.js'
 
-type SearchItemStatus = 'loading' | 'loaded' | 'failed' | 'blocked'
+type CategorySearchStatus = 'loading' | 'loaded' | 'failed' | 'blocked'
 
 export const REVEAL_INTERVAL = 1500 // milliseconds
 
-type CategorySearchItem = {
-	status: SearchItemStatus
+type CategorySearchState = {
+	status: CategorySearchStatus
 	entries: unknown[]
 	cursor: string | null
 	hasMore: boolean
@@ -18,10 +18,10 @@ type CategorySearchItem = {
  */
 export class UnifiedSearchController {
 	private query: string = ''
-	private searchItems: Record<string, CategorySearchItem> = {}
-	private requestId: number = 0
+	private searchStates: Record<string, CategorySearchState> = {}
+	private searchGeneration: number = 0
 	private revealTimer: ReturnType<typeof setTimeout> | null = null
-	private searchAbortHandlers: (() => void)[] = []
+	private pendingCancels: (() => void)[] = []
 
 	/**
 	 * Start a search. Cancels and replaces any search already in flight.
@@ -31,15 +31,15 @@ export class UnifiedSearchController {
 	 */
 	search(query: string, categories: string[]): void {
 		this.cancelPendingRequests()
-		this.searchItems = {}
-		this.requestId++
-		const dispatchId = this.requestId
+		this.searchStates = {}
+		this.searchGeneration++
+		const generation = this.searchGeneration
 		this.query = query
 
 		this.startRevealTimer()
 
 		categories.forEach((category) => {
-			this.searchItems[category] = {
+			this.searchStates[category] = {
 				status: 'loading',
 				entries: [],
 				cursor: null,
@@ -52,16 +52,16 @@ export class UnifiedSearchController {
 				cursor: null,
 			})
 
-			this.searchAbortHandlers.push(cancel)
+			this.pendingCancels.push(cancel)
 
 			request().then((response) => {
-				if (this.requestId !== dispatchId) {
+				if (this.searchGeneration !== generation) {
 					// A new search has been started, ignore this result
 					return
 				}
 
 				const { entries, cursor, hasMore } = response.data.ocs.data
-				this.searchItems[category] = {
+				this.searchStates[category] = {
 					status: 'loaded',
 					entries,
 					cursor,
@@ -71,10 +71,10 @@ export class UnifiedSearchController {
 
 				this.reconcileCategoryStatuses(categories)
 			}).catch(() => {
-				if (this.requestId !== dispatchId) {
+				if (this.searchGeneration !== generation) {
 					return
 				}
-				this.searchItems[category] = {
+				this.searchStates[category] = {
 					status: 'failed',
 					entries: [],
 					cursor: null,
@@ -94,47 +94,47 @@ export class UnifiedSearchController {
 	 * @param category the category id to page
 	 */
 	loadMore(category: string): void {
-		const dispatchId = this.requestId
-		const categoryItem = this.searchItems[category]
-		if (!categoryItem || !categoryItem.hasMore || categoryItem.status !== 'loaded') {
+		const generation = this.searchGeneration
+		const categoryState = this.searchStates[category]
+		if (!categoryState || !categoryState.hasMore || categoryState.status !== 'loaded') {
 			return
 		}
-		categoryItem.status = 'loading'
-		categoryItem.loadMoreFailed = false
+		categoryState.status = 'loading'
+		categoryState.loadMoreFailed = false
 
 		const { request, cancel } = unifiedSearch({
 			type: category,
 			query: this.query,
-			cursor: categoryItem.cursor,
+			cursor: categoryState.cursor,
 		})
 
-		this.searchAbortHandlers.push(cancel)
+		this.pendingCancels.push(cancel)
 
 		request().then((response) => {
-			if (this.requestId !== dispatchId) {
+			if (this.searchGeneration !== generation) {
 				return
 			}
 			const { entries, cursor, hasMore } = response.data.ocs.data
-			categoryItem.entries.push(...entries)
-			categoryItem.cursor = cursor
-			categoryItem.hasMore = hasMore
-			categoryItem.status = 'loaded'
+			categoryState.entries.push(...entries)
+			categoryState.cursor = cursor
+			categoryState.hasMore = hasMore
+			categoryState.status = 'loaded'
 		}).catch(() => {
-			if (this.requestId !== dispatchId) {
+			if (this.searchGeneration !== generation) {
 				return
 			}
-			categoryItem.status = 'loaded'
-			categoryItem.loadMoreFailed = true
+			categoryState.status = 'loaded'
+			categoryState.loadMoreFailed = true
 		})
 	}
 
 	/**
 	 * A shallow copy of the current per-category state, safe to read for rendering.
 	 *
-	 * @return the current search items keyed by category id
+	 * @return the current search states keyed by category id
 	 */
-	getSnapshot(): Record<string, CategorySearchItem> {
-		return { ...this.searchItems }
+	getSnapshot(): Record<string, CategorySearchState> {
+		return { ...this.searchStates }
 	}
 
 	/**
@@ -147,18 +147,18 @@ export class UnifiedSearchController {
 
 	private reconcileCategoryStatuses(categories: string[]): void {
 		categories.forEach((category) => {
-			if (['loading', 'failed'].includes(this.searchItems[category].status)) {
+			if (['loading', 'failed'].includes(this.searchStates[category].status)) {
 				return
 			}
-			this.searchItems[category].status = this.categoryShouldBlock(category, categories) ? 'blocked' : 'loaded'
+			this.searchStates[category].status = this.shouldBlockCategory(category, categories) ? 'blocked' : 'loaded'
 		})
 	}
 
 	private startRevealTimer(): void {
 		this.stopRevealTimer()
 		this.revealTimer = setTimeout(() => {
-			const categories = Object.keys(this.searchItems)
-			const hasPendingCategories = categories.some((category) => ['loading', 'blocked'].includes(this.searchItems[category].status))
+			const categories = Object.keys(this.searchStates)
+			const hasPendingCategories = categories.some((category) => ['loading', 'blocked'].includes(this.searchStates[category].status))
 			this.unblockAllCategories(categories)
 			if (hasPendingCategories) {
 				this.startRevealTimer()
@@ -174,27 +174,26 @@ export class UnifiedSearchController {
 	}
 
 	private cancelPendingRequests(): void {
-		this.searchAbortHandlers.forEach((cancel) => cancel())
-		this.searchAbortHandlers = []
+		this.pendingCancels.forEach((cancel) => cancel())
+		this.pendingCancels = []
 	}
 
 	private unblockAllCategories(categories: string[]): void {
 		categories.forEach((category) => {
-			if (this.searchItems[category].status === 'blocked') {
-				this.searchItems[category].status = 'loaded'
+			if (this.searchStates[category].status === 'blocked') {
+				this.searchStates[category].status = 'loaded'
 			}
 		})
 	}
 
-	private categoryShouldBlock(category: string, categories: string[]): boolean {
-		const categoryItem = this.searchItems[category]
-		if (!categoryItem) {
+	private shouldBlockCategory(category: string, categories: string[]): boolean {
+		if (!this.searchStates[category]) {
 			return false
 		}
 
 		return categories.slice(0, categories.indexOf(category)).some((c) => {
-			const item = this.searchItems[c]
-			return item && ['loading', 'blocked'].includes(item.status)
+			const categoryState = this.searchStates[c]
+			return categoryState && ['loading', 'blocked'].includes(categoryState.status)
 		})
 	}
 }
