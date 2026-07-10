@@ -15,6 +15,14 @@ interface CategorySearchState {
 	loadMoreFailed: boolean
 }
 
+interface CategorySearchParams {
+	type?: string
+	since?: string
+	until?: string
+	person?: string
+	extraQueries?: object
+}
+
 export const REVEAL_INTERVAL_MS = 1500
 
 /**
@@ -23,6 +31,7 @@ export const REVEAL_INTERVAL_MS = 1500
  */
 export class UnifiedSearchController {
 	private query: string = ''
+	private params: Record<string, CategorySearchParams> = {}
 	private searchStates: Record<string, CategorySearchState> = {}
 	private searchGeneration: number = 0
 	private revealTimer: ReturnType<typeof setTimeout> | null = null
@@ -33,14 +42,16 @@ export class UnifiedSearchController {
 	 *
 	 * @param query the search term
 	 * @param categories category ids in priority order
+	 * @param params optional per-category search parameters
 	 * @return resolves once every category has settled
 	 */
-	async search(query: string, categories: string[]): Promise<void> {
+	async search(query: string, categories: string[], params?: Record<string, CategorySearchParams>): Promise<void> {
 		this.cancelPendingRequests()
 		this.searchStates = {}
 		this.searchGeneration++
 		const generation = this.searchGeneration
 		this.query = query
+		this.params = params || {}
 
 		this.startRevealTimer()
 
@@ -67,6 +78,7 @@ export class UnifiedSearchController {
 			type: category,
 			query: this.query,
 			cursor: categoryState.cursor,
+			...this.params[category],
 		})
 
 		this.pendingCancels.push(cancel)
@@ -107,7 +119,11 @@ export class UnifiedSearchController {
 		this.stopRevealTimer()
 	}
 
-	private async searchCategory(category: string, generation: number, categories: string[]): Promise<void> {
+	private async searchCategory(
+		category: string,
+		generation: number,
+		categories: string[],
+	): Promise<void> {
 		this.searchStates[category] = {
 			status: 'loading',
 			entries: [],
@@ -119,6 +135,7 @@ export class UnifiedSearchController {
 			type: category,
 			query: this.query,
 			cursor: null,
+			...this.params[category],
 		})
 
 		this.pendingCancels.push(cancel)

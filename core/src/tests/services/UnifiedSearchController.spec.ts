@@ -427,6 +427,76 @@ describe('UnifiedSearchController', () => {
 		})
 	})
 
+	describe('filter pass-through', () => {
+		it('forwards per-category filter params on the initial search', async () => {
+			const files = pagedProvider()
+			service.search.mockReturnValue(files)
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files'], {
+				files: { since: '2026-01-01', until: '2026-02-01', person: 'alice', extraQueries: { tag: 'important' } },
+			})
+
+			expect(service.search).toHaveBeenCalledWith(expect.objectContaining({
+				type: 'files',
+				query: 'query',
+				cursor: null,
+				since: '2026-01-01',
+				until: '2026-02-01',
+				person: 'alice',
+				extraQueries: { tag: 'important' },
+			}))
+		})
+
+		it('reuses the stored filter params when paginating', async () => {
+			const files = pagedProvider()
+			service.search.mockReturnValue(files)
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files'], {
+				files: { since: '2026-01-01', until: '2026-02-01', person: 'alice', extraQueries: { tag: 'important' } },
+			})
+
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			await vi.advanceTimersByTimeAsync(0)
+
+			searchController.loadMore('files')
+
+			// Page 2 must carry the same filters as page 1, not just type/query/cursor.
+			expect(service.search).toHaveBeenLastCalledWith(expect.objectContaining({
+				type: 'files',
+				query: 'query',
+				cursor: 'cursor-1',
+				since: '2026-01-01',
+				until: '2026-02-01',
+				person: 'alice',
+				extraQueries: { tag: 'important' },
+			}))
+		})
+
+		it('dispatches the type override on both requests while keying state by category id', async () => {
+			const files = pagedProvider()
+			service.search.mockReturnValue(files)
+
+			const searchController = new UnifiedSearchController()
+			// 'in-folder' is a searchFrom-style alias that dispatches to the 'files' backend.
+			searchController.search('query', ['in-folder'], { 'in-folder': { type: 'files' } })
+
+			// The request dispatches to the override type...
+			expect(service.search).toHaveBeenCalledWith(expect.objectContaining({ type: 'files' }))
+			// ...but the category stays keyed by its own id, so two aliases can't collide.
+			expect(Object.keys(searchController.getSnapshot())).toEqual(['in-folder'])
+
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			await vi.advanceTimersByTimeAsync(0)
+
+			searchController.loadMore('in-folder')
+
+			// loadMore carries the override too, not the category id.
+			expect(service.search).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'files', cursor: 'cursor-1' }))
+		})
+	})
+
 	describe('reveal timer', () => {
 		it('marks blocked categories as loaded after a certain amount of time has elapsed', async () => {
 			const providers = mockProviders(['files', 'talk', 'deck'])
