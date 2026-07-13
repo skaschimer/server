@@ -307,6 +307,84 @@ describe('UnifiedSearchController', () => {
 		})
 	})
 
+	describe('change notification', () => {
+		it('notifies once the initial loading states are set, before any provider resolves', () => {
+			service.search.mockImplementation(() => deferredProvider())
+			const onChange = vi.fn()
+
+			const searchController = new UnifiedSearchController(onChange)
+			searchController.search('query', ['files', 'talk'])
+
+			// The adapter must be able to paint the loading spinners straight away,
+			// without waiting for the first response to land.
+			expect(onChange).toHaveBeenCalled()
+			expect(searchController.getSnapshot()).toEqual({ files: loading, talk: loading })
+		})
+
+		it('notifies when a category resolves', async () => {
+			const providers = mockProviders(['files'])
+			const onChange = vi.fn()
+
+			const searchController = new UnifiedSearchController(onChange)
+			searchController.search('query', ['files'])
+			onChange.mockClear()
+
+			providers.files.resolve(['Files result'])
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(onChange).toHaveBeenCalled()
+		})
+
+		it('notifies when loadMore appends a page', async () => {
+			const files = pagedProvider()
+			service.search.mockReturnValue(files)
+			const onChange = vi.fn()
+
+			const searchController = new UnifiedSearchController(onChange)
+			searchController.search('query', ['files'])
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			await vi.advanceTimersByTimeAsync(0)
+			onChange.mockClear()
+
+			searchController.loadMore('files')
+			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+			await vi.advanceTimersByTimeAsync(0)
+
+			expect(onChange).toHaveBeenCalled()
+		})
+
+		it('notifies when the reveal timer unblocks a category', async () => {
+			const providers = mockProviders(['files', 'talk'])
+			const onChange = vi.fn()
+
+			const searchController = new UnifiedSearchController(onChange)
+			searchController.search('query', ['files', 'talk'])
+
+			// talk arrives out of order and is blocked behind files (still loading).
+			providers.talk.resolve(['Talk result'])
+			await vi.advanceTimersByTimeAsync(0)
+			expect(searchController.getSnapshot().talk.status).toBe('blocked')
+			onChange.mockClear()
+
+			// The timer flush promotes it to loaded; the adapter must hear about it.
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS)
+			expect(searchController.getSnapshot().talk.status).toBe('loaded')
+			expect(onChange).toHaveBeenCalled()
+		})
+
+		it('works without an onChange callback', async () => {
+			const providers = mockProviders(['files'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files'])
+			providers.files.resolve(['Files result'])
+
+			// The callback is optional; a headless controller must still run.
+			await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
+			expect(searchController.getSnapshot().files.status).toBe('loaded')
+		})
+	})
+
 	describe('pagination', () => {
 		it('appends the next page of results when loadMore is called', async () => {
 			const files = pagedProvider()
@@ -338,6 +416,33 @@ describe('UnifiedSearchController', () => {
 				hasMore: false,
 				loadMoreFailed: false,
 			})
+		})
+
+		it('reports a loading state, with page 1 still visible, while the next page is in flight', async () => {
+			const files = pagedProvider()
+			service.search.mockReturnValue(files)
+			const onChange = vi.fn()
+
+			const searchController = new UnifiedSearchController(onChange)
+			searchController.search('query', ['files'])
+
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			await vi.advanceTimersByTimeAsync(0)
+			onChange.mockClear()
+
+			// Page 2 is requested but has not resolved yet.
+			searchController.loadMore('files')
+
+			// The view needs a loading signal for the paging spinner, without losing
+			// the results already on screen, and the adapter must be told at the start.
+			expect(searchController.getSnapshot().files).toEqual({
+				status: 'loading',
+				entries: ['a'],
+				cursor: 'cursor-1',
+				hasMore: true,
+				loadMoreFailed: false,
+			})
+			expect(onChange).toHaveBeenCalled()
 		})
 
 		it('re-dispatches with the stored cursor', async () => {
@@ -424,6 +529,50 @@ describe('UnifiedSearchController', () => {
 
 			// The initial search is the only dispatch; loadMore must not fire another.
 			expect(service.search).toHaveBeenCalledTimes(1)
+		})
+
+		it('does not mutate a snapshot already handed out when a later page loads', async () => {
+			const files = pagedProvider()
+			service.search.mockReturnValue(files)
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files'])
+
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			await vi.advanceTimersByTimeAsync(0)
+
+			// A consumer reads and holds the snapshot, the way the Vue adapter does.
+			const firstPage = searchController.getSnapshot()
+
+			searchController.loadMore('files')
+			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+			await vi.advanceTimersByTimeAsync(0)
+
+			// loadMore must not reach back into an array a previous getSnapshot()
+			// already exposed; the earlier snapshot stays frozen.
+			expect(firstPage.files.entries).toEqual(['a'])
+		})
+
+		it('hands out fresh state and entries references across a loadMore', async () => {
+			const files = pagedProvider()
+			service.search.mockReturnValue(files)
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files'])
+
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			await vi.advanceTimersByTimeAsync(0)
+			const before = searchController.getSnapshot()
+
+			searchController.loadMore('files')
+			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+			await vi.advanceTimersByTimeAsync(0)
+			const after = searchController.getSnapshot()
+
+			// A new object and array identity on each change is what lets the adapter's
+			// ref reassignment re-render instead of aliasing a mutated object.
+			expect(after.files).not.toBe(before.files)
+			expect(after.files.entries).not.toBe(before.files.entries)
 		})
 	})
 

@@ -37,6 +37,8 @@ export class UnifiedSearchController {
 	private revealTimer: ReturnType<typeof setTimeout> | null = null
 	private pendingCancels: (() => void)[] = []
 
+	constructor(private onChange?: (states: Record<string, CategorySearchState>) => void) {}
+
 	/**
 	 * Start a search. Cancels and replaces any search already in flight.
 	 *
@@ -67,12 +69,12 @@ export class UnifiedSearchController {
 	 */
 	async loadMore(category: string): Promise<void> {
 		const generation = this.searchGeneration
-		const categoryState = this.searchStates[category]
-		if (!categoryState || !categoryState.hasMore || categoryState.status !== 'loaded') {
+		const categoryState = { ...this.searchStates[category] }
+		if (!categoryState.hasMore || categoryState.status !== 'loaded') {
 			return
 		}
-		categoryState.status = 'loading'
-		categoryState.loadMoreFailed = false
+
+		this.patchStates({ [category]: { status: 'loading', loadMoreFailed: false } })
 
 		const { request, cancel } = unifiedSearch({
 			type: category,
@@ -89,17 +91,19 @@ export class UnifiedSearchController {
 				return
 			}
 			const { entries, cursor, hasMore } = response.data.ocs.data
-			categoryState.entries.push(...entries)
-			categoryState.cursor = cursor
-			categoryState.hasMore = hasMore
+
+			this.patchStates({[category]: {
+				entries: [...categoryState.entries, ...entries],
+				cursor,
+				hasMore,
+				status: 'loaded',
+			}})
 		} catch {
 			if (this.searchGeneration !== generation) {
 				return
 			}
-			categoryState.loadMoreFailed = true
+			this.patchStates({ [category]: { status: 'loaded', loadMoreFailed: true } })
 		}
-
-		categoryState.status = 'loaded'
 	}
 
 	/**
@@ -124,13 +128,14 @@ export class UnifiedSearchController {
 		generation: number,
 		categories: string[],
 	): Promise<void> {
-		this.searchStates[category] = {
+		this.patchStates({ [category]: {
 			status: 'loading',
 			entries: [],
 			cursor: null,
 			hasMore: false,
 			loadMoreFailed: false,
-		}
+		} })
+
 		const { request, cancel } = unifiedSearch({
 			type: category,
 			query: this.query,
@@ -148,24 +153,24 @@ export class UnifiedSearchController {
 			}
 
 			const { entries, cursor, hasMore } = response.data.ocs.data
-			this.searchStates[category] = {
+			this.patchStates({ [category]: {
 				status: 'loaded',
 				entries,
 				cursor,
 				hasMore,
 				loadMoreFailed: false,
-			}
+			} })
 		} catch {
 			if (this.searchGeneration !== generation) {
 				return
 			}
-			this.searchStates[category] = {
+			this.patchStates({ [category]: {
 				status: 'failed',
 				entries: [],
 				cursor: null,
 				hasMore: false,
 				loadMoreFailed: false,
-			}
+			}})
 		}
 
 		this.reconcileCategoryStatuses(categories)
@@ -176,7 +181,7 @@ export class UnifiedSearchController {
 			if (['loading', 'failed'].includes(this.searchStates[category].status)) {
 				return
 			}
-			this.searchStates[category].status = this.shouldBlockCategory(category, categories) ? 'blocked' : 'loaded'
+			this.patchStates({ [category]: { status: this.shouldBlockCategory(category, categories) ? 'blocked' : 'loaded' } })
 		})
 	}
 
@@ -207,7 +212,7 @@ export class UnifiedSearchController {
 	private unblockAllCategories(categories: string[]): void {
 		categories.forEach((category) => {
 			if (this.searchStates[category].status === 'blocked') {
-				this.searchStates[category].status = 'loaded'
+				this.patchStates({ [category]: { status: 'loaded' } })
 			}
 		})
 	}
@@ -221,5 +226,13 @@ export class UnifiedSearchController {
 			const categoryState = this.searchStates[c]
 			return categoryState && ['loading', 'blocked'].includes(categoryState.status)
 		})
+	}
+
+	private patchStates(next: Record<string, Partial<CategorySearchState>>): void {
+		Object.keys(next).forEach((category) => {
+			const categoryState = { ...this.searchStates[category], ...next[category] }
+			this.searchStates[category] = categoryState
+		})
+		this.onChange?.(this.getSnapshot())
 	}
 }
