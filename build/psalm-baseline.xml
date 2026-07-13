@@ -4184,8 +4184,14 @@
     </MoreSpecificImplementedParamType>
   </file>
   <file src="lib/private/Teams/TeamManager.php">
+    <LessSpecificReturnStatement>
+      <code><![CDATA[array_map($this->circleToTeam(...), $this->circlesManager->probeCircles())]]></code>
+    </LessSpecificReturnStatement>
+    <MoreSpecificReturnType>
+      <code><![CDATA[array]]></code>
+    </MoreSpecificReturnType>
     <UndefinedDocblockClass>
-      <code><![CDATA[Circle]]></code>
+      <code><![CDATA[Circle[]]]></code>
     </UndefinedDocblockClass>
   </file>
   <file src="lib/private/Template/Base.php">
