@@ -895,6 +895,7 @@ return array(
     'OCP\\Share\\ShareReview\\IShareReviewSource' => $baseDir . '/lib/public/Share/ShareReview/IShareReviewSource.php',
     'OCP\\Share\\ShareReview\\RegisterShareReviewSourceEvent' => $baseDir . '/lib/public/Share/ShareReview/RegisterShareReviewSourceEvent.php',
     'OCP\\Share\\ShareReview\\ShareReviewEntry' => $baseDir . '/lib/public/Share/ShareReview/ShareReviewEntry.php',
+    'OCP\\Share\\ShareReview\\ShareReviewPermission' => $baseDir . '/lib/public/Share/ShareReview/ShareReviewPermission.php',
     'OCP\\Snowflake\\ISnowflakeDecoder' => $baseDir . '/lib/public/Snowflake/ISnowflakeDecoder.php',
     'OCP\\Snowflake\\ISnowflakeGenerator' => $baseDir . '/lib/public/Snowflake/ISnowflakeGenerator.php',
     'OCP\\Snowflake\\Snowflake' => $baseDir . '/lib/public/Snowflake/Snowflake.php',
