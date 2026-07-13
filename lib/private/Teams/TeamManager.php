@@ -119,13 +119,7 @@ class TeamManager implements ITeamManager {
 		}
 
 		$provider = $this->getProvider($providerId);
-		return array_map(function (Circle $team) {
-			return new Team(
-				$team->getSingleId(),
-				$team->getDisplayName(),
-				$this->urlGenerator->linkToRouteAbsolute('contacts.contacts.directcircle', ['singleId' => $team->getSingleId()]),
-			);
-		}, $this->getTeams($provider->getTeamsForResource($resourceId), $userId));
+		return array_map($this->circleToTeam(...), $this->getTeams($provider->getTeamsForResource($resourceId), $userId));
 	}
 
 	private function getTeam(string $teamId, string $userId, ?CircleProbe $probe = null): ?Circle {
@@ -182,15 +176,15 @@ class TeamManager implements ITeamManager {
 
 		$federatedUser = $this->circlesManager->getFederatedUser($userId, Member::TYPE_USER);
 		$this->circlesManager->startSession($federatedUser);
-		$teams = [];
-		foreach ($this->circlesManager->probeCircles() as $team) {
-			$teams[] = new Team(
-				$team->getSingleId(),
-				$team->getDisplayName(),
-				$this->urlGenerator->linkToRouteAbsolute('contacts.contacts.directcircle', ['singleId' => $team->getSingleId()]),
-			);
-		}
 
-		return $teams;
+		return array_map($this->circleToTeam(...), $this->circlesManager->probeCircles());
+	}
+
+	private function circleToTeam(Circle $circle): Team {
+		return new Team(
+			$circle->getSingleId(),
+			$circle->getDisplayName(),
+			$this->urlGenerator->linkToRouteAbsolute('contacts.contacts.directcircle', ['singleId' => $circle->getSingleId()]),
+		);
 	}
 }
