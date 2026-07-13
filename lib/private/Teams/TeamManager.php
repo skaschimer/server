@@ -79,7 +79,7 @@ class TeamManager implements ITeamManager {
 		$probe = new CircleProbe();
 		$probe->mustBeMember();
 
-		if ($this->getTeam($teamId, $userId, $probe) === null) {
+		if ($this->getTeamInternal($teamId, $userId, $probe) === null) {
 			return [];
 		}
 
@@ -122,7 +122,7 @@ class TeamManager implements ITeamManager {
 		return array_map($this->circleToTeam(...), $this->getTeams($provider->getTeamsForResource($resourceId), $userId));
 	}
 
-	private function getTeam(string $teamId, string $userId, ?CircleProbe $probe = null): ?Circle {
+	private function getTeamInternal(string $teamId, string $userId, ?CircleProbe $probe = null): ?Circle {
 		if (!$this->hasTeamSupport()) {
 			return null;
 		}
@@ -143,7 +143,7 @@ class TeamManager implements ITeamManager {
 	 */
 	#[\Override]
 	public function getMembersOfTeam(string $teamId, string $userId): array {
-		$team = $this->getTeam($teamId, $userId);
+		$team = $this->getTeamInternal($teamId, $userId);
 		if ($team === null) {
 			return [];
 		}
@@ -178,6 +178,25 @@ class TeamManager implements ITeamManager {
 		$this->circlesManager->startSession($federatedUser);
 
 		return array_map($this->circleToTeam(...), $this->circlesManager->probeCircles());
+	}
+
+	#[\Override]
+	public function getTeam(string $teamId, ?string $userId = null): ?Team {
+		if (!$this->hasTeamSupport()) {
+			return null;
+		}
+
+		if ($userId !== null) {
+			$this->circlesManager->startSession($this->circlesManager->getLocalFederatedUser($userId));
+		} else {
+			$this->circlesManager->startSuperSession();
+		}
+
+		try {
+			return $this->circleToTeam($this->circlesManager->getCircle($teamId));
+		} catch (CircleNotFoundException) {
+			return null;
+		}
 	}
 
 	private function circleToTeam(Circle $circle): Team {
