@@ -7,13 +7,13 @@
 
 namespace OCA\WorkflowEngine\Check;
 
+use OCP\Cache\CappedMemoryCache;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\WorkflowEngine\ICheck;
 
 class RequestRemoteAddress implements ICheck {
-	/** @var array<string, bool> */
-	protected array $checked = [];
+	protected CappedMemoryCache $checked;
 
 	/**
 	 * @param IL10N $l
@@ -23,6 +23,7 @@ class RequestRemoteAddress implements ICheck {
 		protected IL10N $l,
 		protected IRequest $request,
 	) {
+		$this->checked = new CappedMemoryCache();
 	}
 
 	/**
