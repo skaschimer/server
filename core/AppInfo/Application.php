@@ -125,16 +125,13 @@ class Application extends App implements IBootstrap {
 
 		// Register the logout button in the user settings
 		$logoutUrl = \OC_User::getLogoutUrl($urlGenerator);
-		if ($logoutUrl !== '') {
-			$navigationManager->add([
-				'type' => 'settings',
-				'id' => 'logout',
-				'order' => 99999,
-				'href' => $logoutUrl,
-				'name' => $l->t('Log out'),
-				'icon' => $urlGenerator->imagePath('core', 'actions/logout.svg'),
-			]);
-		}
+		$navigationManager->add([
+			'type' => 'settings',
+			'id' => 'logout',
+			'order' => 99999,
+			'href' => $logoutUrl,
+			'name' => $l->t('Log out'),
+			'icon' => $urlGenerator->imagePath('core', 'actions/logout.svg'),
+		]);
 	}
-
 }
