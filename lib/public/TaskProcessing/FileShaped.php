@@ -56,7 +56,7 @@ class FileShaped {
 		if ($ext === '') {
 			return '';
 		}
-		$ext = str_replace(array('.', '/'), '', $ext);
+		$ext = str_replace(['.', '/'], '', $ext);
 		return $ext;
 	}
 }

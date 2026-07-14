@@ -627,7 +627,7 @@ class ExternalTriggerableProvider implements ITriggerableProvider {
 	#[\Override]
 	public function getOptionalOutputShape(): array {
 		return [];
-	}Supercloud?
+	}
 	#[\Override]
 	public function getInputShapeEnumValues(): array {
 		return [];
