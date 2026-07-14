@@ -22,7 +22,8 @@ function deferredProvider() {
 		cancel: vi.fn(),
 		request: async () => {
 			const { entries } = await promise
-			return { data: { ocs: { data: { entries } } } }
+			// The real OCS endpoint returns a complete (non-paginated) result shape.
+			return { data: { ocs: { data: { entries, cursor: null, isPaginated: false } } } }
 		},
 		resolve: (entries: unknown[] = []) => resolve({ entries }),
 		reject,
@@ -32,10 +33,10 @@ function deferredProvider() {
 /**
  * Deferred stand-in that serves successive pages. Each `request()` call takes
  * the next page; a test resolves page N on demand with `resolvePage(n, data)`,
- * where `data` is the full `{ entries, cursor, hasMore }` payload.
+ * where `data` mirrors the OCS payload: `{ entries, cursor, isPaginated }`.
  */
 function pagedProvider() {
-	const pages: ReturnType<typeof Promise.withResolvers<{ entries: unknown[], cursor: string | null, hasMore: boolean }>>[] = []
+	const pages: ReturnType<typeof Promise.withResolvers<{ entries: unknown[], cursor: string | number | null, isPaginated: boolean }>>[] = []
 	const pageAt = (index: number) => (pages[index] ??= Promise.withResolvers())
 	let call = 0
 	return {
@@ -44,7 +45,7 @@ function pagedProvider() {
 			const data = await pageAt(call++).promise
 			return { data: { ocs: { data } } }
 		},
-		resolvePage: (index: number, data: { entries: unknown[], cursor: string | null, hasMore: boolean }) => pageAt(index).resolve(data),
+		resolvePage: (index: number, data: { entries: unknown[], cursor: string | number | null, isPaginated: boolean }) => pageAt(index).resolve(data),
 		rejectPage: (index: number, reason?: unknown) => pageAt(index).reject(reason),
 	}
 }
@@ -101,7 +102,7 @@ describe('UnifiedSearchController', () => {
 			await vi.advanceTimersByTimeAsync(0)
 
 			expect(searchController.getSnapshot()).toEqual({
-				files: { status: 'loaded', entries: ['Some result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				files: { status: 'loaded', entries: ['Some result'], cursor: null, hasMore: false, loadMoreFailed: false },
 			})
 		})
 	})
@@ -120,7 +121,7 @@ describe('UnifiedSearchController', () => {
 			expect(searchController.getSnapshot()).toEqual({
 				files: loading,
 				talk: loading,
-				deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				deck: { status: 'blocked', entries: ['Deck result'], cursor: null, hasMore: false, loadMoreFailed: false },
 			})
 		})
 
@@ -137,7 +138,7 @@ describe('UnifiedSearchController', () => {
 			expect(searchController.getSnapshot()).toEqual({
 				files: loading,
 				talk: loading,
-				deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				deck: { status: 'blocked', entries: ['Deck result'], cursor: null, hasMore: false, loadMoreFailed: false },
 			})
 
 			providers.files.resolve(['Files result'])
@@ -146,9 +147,9 @@ describe('UnifiedSearchController', () => {
 			await vi.advanceTimersByTimeAsync(0)
 
 			expect(searchController.getSnapshot()).toEqual({
-				files: { status: 'loaded', entries: ['Files result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
-				talk: { status: 'loaded', entries: ['Talk result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
-				deck: { status: 'loaded', entries: ['Deck result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				files: { status: 'loaded', entries: ['Files result'], cursor: null, hasMore: false, loadMoreFailed: false },
+				talk: { status: 'loaded', entries: ['Talk result'], cursor: null, hasMore: false, loadMoreFailed: false },
+				deck: { status: 'loaded', entries: ['Deck result'], cursor: null, hasMore: false, loadMoreFailed: false },
 			})
 		})
 
@@ -163,7 +164,7 @@ describe('UnifiedSearchController', () => {
 
 			expect(searchController.getSnapshot()).toEqual({
 				files: loading,
-				talk: { status: 'blocked', entries: ['Talk result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				talk: { status: 'blocked', entries: ['Talk result'], cursor: null, hasMore: false, loadMoreFailed: false },
 				deck: loading,
 			})
 
@@ -175,7 +176,7 @@ describe('UnifiedSearchController', () => {
 
 			expect(searchController.getSnapshot()).toEqual({
 				files: { status: 'failed', entries: [], cursor: null, hasMore: false, loadMoreFailed: false },
-				talk: { status: 'loaded', entries: ['Talk result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				talk: { status: 'loaded', entries: ['Talk result'], cursor: null, hasMore: false, loadMoreFailed: false },
 				deck: loading,
 			})
 		})
@@ -210,8 +211,8 @@ describe('UnifiedSearchController', () => {
 			expect(searchController.getSnapshot().files).toEqual({
 				status: 'loaded',
 				entries: ['Live files'],
-				cursor: undefined,
-				hasMore: undefined,
+				cursor: null,
+				hasMore: false,
 				loadMoreFailed: false,
 			})
 		})
@@ -240,8 +241,31 @@ describe('UnifiedSearchController', () => {
 			await vi.advanceTimersByTimeAsync(0)
 
 			expect(searchController.getSnapshot()).toEqual({
-				deck: { status: 'loaded', entries: ['Live deck'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				deck: { status: 'loaded', entries: ['Live deck'], cursor: null, hasMore: false, loadMoreFailed: false },
 			})
+		})
+	})
+
+	describe('result ordering', () => {
+		it('keeps categories in the order passed to search, regardless of which resolve first', async () => {
+			const providers = mockProviders(['files', 'talk', 'deck'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk', 'deck'])
+
+			// Resolve in reverse priority order: lowest-priority provider first,
+			// highest-priority one last. If order followed arrival, this would flip it.
+			providers.deck.resolve(['deck result'])
+			await vi.advanceTimersByTimeAsync(0)
+			providers.talk.resolve(['talk result'])
+			await vi.advanceTimersByTimeAsync(0)
+			providers.files.resolve(['files result'])
+			await vi.advanceTimersByTimeAsync(0)
+
+			// Keys still follow the categories array: each category's slot is inserted
+			// synchronously (the 'loading' patch) before any request resolves, so
+			// arrival order cannot reorder the snapshot.
+			expect(Object.keys(searchController.getSnapshot())).toEqual(['files', 'talk', 'deck'])
 		})
 	})
 
@@ -342,12 +366,12 @@ describe('UnifiedSearchController', () => {
 
 			const searchController = new UnifiedSearchController(onChange)
 			searchController.search('query', ['files'])
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 			onChange.mockClear()
 
 			searchController.loadMore('files')
-			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', isPaginated: false })
 			await vi.advanceTimersByTimeAsync(0)
 
 			expect(onChange).toHaveBeenCalled()
@@ -386,6 +410,25 @@ describe('UnifiedSearchController', () => {
 	})
 
 	describe('pagination', () => {
+		it('derives hasMore from the backend isPaginated + cursor, never a hasMore field', async () => {
+			const files = pagedProvider()
+			service.search.mockReturnValue(files)
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files'])
+
+			// A paginated result carrying a cursor can page further.
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(searchController.getSnapshot().files.hasMore).toBe(true)
+
+			// A non-paginated (complete) result cannot, even with a cursor still present.
+			searchController.loadMore('files')
+			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', isPaginated: false })
+			await vi.advanceTimersByTimeAsync(0)
+			expect(searchController.getSnapshot().files.hasMore).toBe(false)
+		})
+
 		it('appends the next page of results when loadMore is called', async () => {
 			const files = pagedProvider()
 			service.search.mockReturnValue(files)
@@ -393,7 +436,7 @@ describe('UnifiedSearchController', () => {
 			const searchController = new UnifiedSearchController()
 			searchController.search('query', ['files'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 
 			expect(searchController.getSnapshot().files).toEqual({
@@ -406,7 +449,7 @@ describe('UnifiedSearchController', () => {
 
 			searchController.loadMore('files')
 
-			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', isPaginated: false })
 			await vi.advanceTimersByTimeAsync(0)
 
 			expect(searchController.getSnapshot().files).toEqual({
@@ -426,7 +469,7 @@ describe('UnifiedSearchController', () => {
 			const searchController = new UnifiedSearchController(onChange)
 			searchController.search('query', ['files'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 			onChange.mockClear()
 
@@ -452,7 +495,7 @@ describe('UnifiedSearchController', () => {
 			const searchController = new UnifiedSearchController()
 			searchController.search('query', ['files'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 
 			searchController.loadMore('files')
@@ -467,7 +510,7 @@ describe('UnifiedSearchController', () => {
 			const searchController = new UnifiedSearchController()
 			searchController.search('query', ['files'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 
 			searchController.loadMore('files')
@@ -492,7 +535,7 @@ describe('UnifiedSearchController', () => {
 			const searchController = new UnifiedSearchController()
 			searchController.search('query', ['files'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 
 			// A first loadMore fails and raises the flag.
@@ -503,7 +546,7 @@ describe('UnifiedSearchController', () => {
 
 			// Retrying succeeds and must clear the stale flag.
 			searchController.loadMore('files')
-			files.resolvePage(2, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+			files.resolvePage(2, { entries: ['b'], cursor: 'cursor-2', isPaginated: false })
 			await vi.advanceTimersByTimeAsync(0)
 
 			expect(searchController.getSnapshot().files).toEqual({
@@ -522,7 +565,7 @@ describe('UnifiedSearchController', () => {
 			const searchController = new UnifiedSearchController()
 			searchController.search('query', ['files'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: false })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: false })
 			await vi.advanceTimersByTimeAsync(0)
 
 			searchController.loadMore('files')
@@ -538,14 +581,14 @@ describe('UnifiedSearchController', () => {
 			const searchController = new UnifiedSearchController()
 			searchController.search('query', ['files'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 
 			// A consumer reads and holds the snapshot, the way the Vue adapter does.
 			const firstPage = searchController.getSnapshot()
 
 			searchController.loadMore('files')
-			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', isPaginated: false })
 			await vi.advanceTimersByTimeAsync(0)
 
 			// loadMore must not reach back into an array a previous getSnapshot()
@@ -560,12 +603,12 @@ describe('UnifiedSearchController', () => {
 			const searchController = new UnifiedSearchController()
 			searchController.search('query', ['files'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 			const before = searchController.getSnapshot()
 
 			searchController.loadMore('files')
-			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+			files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', isPaginated: false })
 			await vi.advanceTimersByTimeAsync(0)
 			const after = searchController.getSnapshot()
 
@@ -606,7 +649,7 @@ describe('UnifiedSearchController', () => {
 				files: { since: '2026-01-01', until: '2026-02-01', person: 'alice', extraQueries: { tag: 'important' } },
 			})
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 
 			searchController.loadMore('files')
@@ -636,7 +679,7 @@ describe('UnifiedSearchController', () => {
 			// ...but the category stays keyed by its own id, so two aliases can't collide.
 			expect(Object.keys(searchController.getSnapshot())).toEqual(['in-folder'])
 
-			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+			files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 			await vi.advanceTimersByTimeAsync(0)
 
 			searchController.loadMore('in-folder')
@@ -660,7 +703,7 @@ describe('UnifiedSearchController', () => {
 			expect(searchController.getSnapshot()).toEqual({
 				files: loading,
 				talk: loading,
-				deck: { status: 'blocked', entries: ['Deck result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				deck: { status: 'blocked', entries: ['Deck result'], cursor: null, hasMore: false, loadMoreFailed: false },
 			})
 
 			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS)
@@ -668,7 +711,7 @@ describe('UnifiedSearchController', () => {
 			expect(searchController.getSnapshot()).toEqual({
 				files: loading,
 				talk: loading,
-				deck: { status: 'loaded', entries: ['Deck result'], cursor: undefined, hasMore: undefined, loadMoreFailed: false },
+				deck: { status: 'loaded', entries: ['Deck result'], cursor: null, hasMore: false, loadMoreFailed: false },
 			})
 		})
 
@@ -733,6 +776,29 @@ describe('UnifiedSearchController', () => {
 			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS - 500)
 
 			expect(searchController.getSnapshot().deck.status).toBe('blocked')
+		})
+
+		it('does not re-block a revealed category when a later category settles behind a still-loading one', async () => {
+			const providers = mockProviders(['files', 'talk', 'deck'])
+
+			const searchController = new UnifiedSearchController()
+			searchController.search('query', ['files', 'talk', 'deck'])
+
+			// talk arrives out of order and is blocked behind files (still loading).
+			providers.talk.resolve(['Talk result'])
+			await vi.advanceTimersByTimeAsync(0)
+			expect(searchController.getSnapshot().talk.status).toBe('blocked')
+
+			// The reveal timer promotes talk to loaded.
+			await vi.advanceTimersByTimeAsync(REVEAL_INTERVAL_MS)
+			expect(searchController.getSnapshot().talk.status).toBe('loaded')
+
+			// deck now settles while files is still loading. Reconcile must not push the
+			// already-revealed talk back to blocked (that flip-flop is the on-screen flicker);
+			// talk stays loaded.
+			providers.deck.resolve(['Deck result'])
+			await vi.advanceTimersByTimeAsync(0)
+			expect(searchController.getSnapshot().talk.status).toBe('loaded')
 		})
 	})
 })

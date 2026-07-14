@@ -7,15 +7,15 @@ import { search as unifiedSearch } from './UnifiedSearchService.js'
 
 type CategorySearchStatus = 'loading' | 'loaded' | 'failed' | 'blocked'
 
-interface CategorySearchState {
+export interface CategorySearchState {
 	status: CategorySearchStatus
 	entries: unknown[]
-	cursor: string | null
+	cursor: string | number | null
 	hasMore: boolean
 	loadMoreFailed: boolean
 }
 
-interface CategorySearchParams {
+export interface CategorySearchParams {
 	type?: string
 	since?: string
 	until?: string
@@ -90,12 +90,12 @@ export class UnifiedSearchController {
 			if (this.searchGeneration !== generation) {
 				return
 			}
-			const { entries, cursor, hasMore } = response.data.ocs.data
+			const { entries, cursor, isPaginated } = response.data.ocs.data
 
 			this.patchStates({[category]: {
 				entries: [...categoryState.entries, ...entries],
 				cursor,
-				hasMore,
+				hasMore: this.hasMorePages(isPaginated, cursor),
 				status: 'loaded',
 			}})
 		} catch {
@@ -152,12 +152,14 @@ export class UnifiedSearchController {
 				return
 			}
 
-			const { entries, cursor, hasMore } = response.data.ocs.data
+			const { entries, cursor, isPaginated } = response.data.ocs.data
+			// Decide blocked vs loaded once, here at settle. Reconcile only promotes after this
+			// (never re-blocks), so this is the only place a category becomes blocked.
 			this.patchStates({ [category]: {
-				status: 'loaded',
+				status: this.shouldBlockCategory(category, categories) ? 'blocked' : 'loaded',
 				entries,
 				cursor,
-				hasMore,
+				hasMore: this.hasMorePages(isPaginated, cursor),
 				loadMoreFailed: false,
 			} })
 		} catch {
@@ -178,10 +180,14 @@ export class UnifiedSearchController {
 
 	private reconcileCategoryStatuses(categories: string[]): void {
 		categories.forEach((category) => {
-			if (['loading', 'failed'].includes(this.searchStates[category].status)) {
+			// Promotion only: reveal a blocked category once its predecessors clear, never demote.
+			// A revealed category must stay revealed, else it flickers when a slower one settles.
+			if (this.searchStates[category].status !== 'blocked') {
 				return
 			}
-			this.patchStates({ [category]: { status: this.shouldBlockCategory(category, categories) ? 'blocked' : 'loaded' } })
+			if (!this.shouldBlockCategory(category, categories)) {
+				this.patchStates({ [category]: { status: 'loaded' } })
+			}
 		})
 	}
 
@@ -215,6 +221,18 @@ export class UnifiedSearchController {
 				this.patchStates({ [category]: { status: 'loaded' } })
 			}
 		})
+	}
+
+	/**
+	 * Whether a category can page further. The backend never sends a "has more"
+	 * flag, only `isPaginated` and a `cursor`, so derive it: a category has more
+	 * pages when it paginates and handed back a cursor to continue from.
+	 *
+	 * @param isPaginated whether the provider returned a paginated result
+	 * @param cursor the cursor to continue from, or null when there is none
+	 */
+	private hasMorePages(isPaginated: boolean, cursor: string | number | null): boolean {
+		return isPaginated && cursor !== null
 	}
 
 	private shouldBlockCategory(category: string, categories: string[]): boolean {

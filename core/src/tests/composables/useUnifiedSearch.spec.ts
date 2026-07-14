@@ -25,7 +25,8 @@ function deferredProvider() {
 		cancel: vi.fn(),
 		request: async () => {
 			const { entries } = await promise
-			return { data: { ocs: { data: { entries } } } }
+			// The real OCS endpoint returns a complete (non-paginated) result shape.
+			return { data: { ocs: { data: { entries, cursor: null, isPaginated: false } } } }
 		},
 		resolve: (entries: unknown[] = []) => resolve({ entries }),
 		reject,
@@ -36,7 +37,7 @@ function deferredProvider() {
  * Deferred stand-in that serves successive pages, for exercising loadMore.
  */
 function pagedProvider() {
-	const pages: ReturnType<typeof Promise.withResolvers<{ entries: unknown[], cursor: string | null, hasMore: boolean }>>[] = []
+	const pages: ReturnType<typeof Promise.withResolvers<{ entries: unknown[], cursor: string | number | null, isPaginated: boolean }>>[] = []
 	const pageAt = (index: number) => (pages[index] ??= Promise.withResolvers())
 	let call = 0
 	return {
@@ -45,7 +46,7 @@ function pagedProvider() {
 			const data = await pageAt(call++).promise
 			return { data: { ocs: { data } } }
 		},
-		resolvePage: (index: number, data: { entries: unknown[], cursor: string | null, hasMore: boolean }) => pageAt(index).resolve(data),
+		resolvePage: (index: number, data: { entries: unknown[], cursor: string | number | null, isPaginated: boolean }) => pageAt(index).resolve(data),
 	}
 }
 
@@ -109,11 +110,11 @@ describe('useUnifiedSearch', () => {
 		const { api } = mountComposable()
 
 		api.search('query', ['files'])
-		files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', hasMore: true })
+		files.resolvePage(0, { entries: ['a'], cursor: 'cursor-1', isPaginated: true })
 		await vi.advanceTimersByTimeAsync(0)
 
 		api.loadMore('files')
-		files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', hasMore: false })
+		files.resolvePage(1, { entries: ['b'], cursor: 'cursor-2', isPaginated: false })
 		await vi.advanceTimersByTimeAsync(0)
 
 		expect(api.searchStates.value.files).toMatchObject({
