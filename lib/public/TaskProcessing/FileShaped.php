@@ -52,6 +52,9 @@ class FileShaped {
 		return $this->extension;
 	}
 
+	/**
+	 * @since 35.0.0
+	 */
 	public static function sanitizeExtension(string $ext): string {
 		if ($ext === '') {
 			return '';
