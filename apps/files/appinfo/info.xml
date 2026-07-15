@@ -47,6 +47,7 @@
 		<command>OCA\Files\Command\Copy</command>
 		<command>OCA\Files\Command\Move</command>
 		<command>OCA\Files\Command\Mkdir</command>
+		<command>OCA\Files\Command\Touch</command>
 		<command>OCA\Files\Command\SanitizeFilenames</command>
 		<command>OCA\Files\Command\Mount\Refresh</command>
 		<command>OCA\Files\Command\Mount\ListMounts</command>

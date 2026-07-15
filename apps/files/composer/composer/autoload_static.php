@@ -65,6 +65,7 @@ class ComposerStaticInitFiles
         'OCA\\Files\\Command\\SanitizeFilenames' => __DIR__ . '/..' . '/../lib/Command/SanitizeFilenames.php',
         'OCA\\Files\\Command\\Scan' => __DIR__ . '/..' . '/../lib/Command/Scan.php',
         'OCA\\Files\\Command\\ScanAppData' => __DIR__ . '/..' . '/../lib/Command/ScanAppData.php',
+        'OCA\\Files\\Command\\Touch' => __DIR__ . '/..' . '/../lib/Command/Touch.php',
         'OCA\\Files\\Command\\TransferOwnership' => __DIR__ . '/..' . '/../lib/Command/TransferOwnership.php',
         'OCA\\Files\\Command\\WindowsCompatibleFilenames' => __DIR__ . '/..' . '/../lib/Command/WindowsCompatibleFilenames.php',
         'OCA\\Files\\ConfigLexicon' => __DIR__ . '/..' . '/../lib/ConfigLexicon.php',

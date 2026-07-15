@@ -50,6 +50,7 @@ return array(
     'OCA\\Files\\Command\\SanitizeFilenames' => $baseDir . '/../lib/Command/SanitizeFilenames.php',
     'OCA\\Files\\Command\\Scan' => $baseDir . '/../lib/Command/Scan.php',
     'OCA\\Files\\Command\\ScanAppData' => $baseDir . '/../lib/Command/ScanAppData.php',
+    'OCA\\Files\\Command\\Touch' => $baseDir . '/../lib/Command/Touch.php',
     'OCA\\Files\\Command\\TransferOwnership' => $baseDir . '/../lib/Command/TransferOwnership.php',
     'OCA\\Files\\Command\\WindowsCompatibleFilenames' => $baseDir . '/../lib/Command/WindowsCompatibleFilenames.php',
     'OCA\\Files\\ConfigLexicon' => $baseDir . '/../lib/ConfigLexicon.php',
