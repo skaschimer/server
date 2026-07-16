@@ -23,7 +23,7 @@ use Symfony\Component\Console\Question\ConfirmationQuestion;
 class Delete extends Command {
 	public function __construct(
 		private readonly FileUtils $fileUtils,
-		private readonly ITrashManager $trashManager,
+		private readonly ?ITrashManager $trashManager = null,
 	) {
 		parent::__construct();
 	}

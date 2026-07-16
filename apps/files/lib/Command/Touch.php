@@ -52,7 +52,6 @@ class Touch extends Command {
 			$node = $this->rootFolder->newFile($fileInput);
 		}
 
-
 		if ($date) {
 			$mtime = $this->parseDateOption($date);
 			if (!$mtime) {
