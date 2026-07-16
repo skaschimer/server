@@ -57,13 +57,18 @@ final class FileShaped {
 	 * @since 35.0.0
 	 */
 	public static function sanitizeExtension(string $ext): string {
-		if ($ext === '' || strtolower($ext) === 'php' || strtolower($ext) === 'htaccess' || strtolower($ext) === 'phar') {
+		if ($ext === '') {
 			return '';
 		}
 		$ext = str_replace(['.', '/'], '', $ext);
 		$ext = preg_replace('/[^A-Za-z0-9]/', '', $ext) ?? $ext;
 		$ext = strtolower($ext);
 		$ext = substr($ext, 0, 16);
+
+		if ($ext === 'php' || $ext === 'htaccess' || $ext === 'phar') {
+			return '';
+		}
+
 		return $ext;
 	}
 }
