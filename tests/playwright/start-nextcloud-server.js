@@ -42,13 +42,29 @@ async function start() {
 		forceRecreate: true,
 	})
 
-	// The installer (setup) tests need to reach the database service containers
-	// (mysql, mariadb, …) that CI exposes on the GitHub Actions network. Join it
-	// when present; a no-op locally and in the normal test job where it is absent.
-	await connectToActionsNetwork()
+	if (process.env.PLAYWRIGHT_SETUP) {
+		// The installer (setup) tests need to reach the database service containers
+		// (mysql, mariadb, …) that CI exposes on the GitHub Actions network. Join it
+		// when present; a no-op locally and in the normal test job where it is absent.
+		await connectToActionsNetwork()
+	}
 
 	await waitOnNextcloud(ip)
 	await configureNextcloud(process.env.PLAYWRIGHT_SETUP ? [] : ['viewer'])
+
+	if (process.env.PLAYWRIGHT_SETUP) {
+		// When the apps folder is mounted, configureNextcloud writes an
+		// apps.config.php declaring a writable apps path at
+		// `/var/www/html/apps_writable`, but it only creates that directory as a
+		// side effect of installing an app into it. The setup job installs no
+		// apps (empty list above), so the directory is never created. The setup
+		// tests remove config.php in beforeEach — leaving apps.config.php — and
+		// the wizard then fails to boot with `App directory
+		// "/var/www/html/apps_writable" not found`. Create it up front.
+		await runExec(['mkdir', '-p', '/var/www/html/apps_writable'], { user: 'root' })
+		await runExec(['chown', 'www-data:www-data', '/var/www/html/apps_writable'], { user: 'root' })
+		process.stdout.write('├─ Created writable apps folder for the setup tests\n')
+	}
 
 	process.stdout.write('\nApply custom configuration for Playwright tests\n')
 	await runExec(['php', '-r', '$db = new SQLite3("data/owncloud.db");$db->busyTimeout(5000);$db->exec("PRAGMA journal_mode = wal;");'])
