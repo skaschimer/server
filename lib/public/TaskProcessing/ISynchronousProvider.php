@@ -30,6 +30,7 @@ interface ISynchronousProvider extends IProvider {
 	 * @psalm-return array<string, list<numeric|string|FileShaped>|numeric|string|FileShaped>
 	 * @throws ProcessingException
 	 * @since 30.0.0
+	 * @since 35.0.0 You can now also return a FileShaped object or a list of FileShaped objects
 	 */
 	public function process(?string $userId, array $input, callable $reportProgress): array;
 }

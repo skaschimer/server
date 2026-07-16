@@ -57,7 +57,7 @@ final class FileShaped {
 	 * @since 35.0.0
 	 */
 	public static function sanitizeExtension(string $ext): string {
-		if ($ext === '') {
+		if ($ext === '' || $ext === 'php' || $ext === 'htaccess' || $ext === 'phar') {
 			return '';
 		}
 		$ext = str_replace(['.', '/'], '', $ext);

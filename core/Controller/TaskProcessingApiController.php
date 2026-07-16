@@ -535,7 +535,7 @@ class TaskProcessingApiController extends OCSController {
 			if (!$handle) {
 				return new DataResponse(['message' => $this->l->t('Internal error')], Http::STATUS_INTERNAL_SERVER_ERROR);
 			}
-			$ext = pathinfo($file['name'], PATHINFO_EXTENSION);
+			$ext = pathinfo(($file['name'] ?? ''), PATHINFO_EXTENSION);
 			$fileId = $this->setFileContentsInternal($handle, $ext);
 			return new DataResponse(['fileId' => $fileId], Http::STATUS_CREATED);
 		} catch (NotFoundException) {

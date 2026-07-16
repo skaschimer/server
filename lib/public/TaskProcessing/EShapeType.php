@@ -148,7 +148,7 @@ enum EShapeType: int {
 			throw new ValidationException('Non-file item provided for File slot');
 		}
 		if ($this === EShapeType::ListOfFiles && (!is_array($value) || count(array_filter($value, fn ($item) => !is_numeric($item))) > 0)) {
-			throw new ValidationException('Non-audio list item provided for ListOfFiles slot');
+			throw new ValidationException('Non-file list item provided for ListOfFiles slot');
 		}
 	}
 
@@ -180,7 +180,7 @@ enum EShapeType: int {
 			throw new ValidationException('Non-file item provided for File slot');
 		}
 		if ($this === EShapeType::ListOfFiles && (!is_array($value) || count(array_filter($value, fn ($item) => !is_string($item) && !($item instanceof FileShaped && $item->getShapeType() === EShapeType::File))) > 0)) {
-			throw new ValidationException('Non-audio list item provided for ListOfFiles slot');
+			throw new ValidationException('Non-file list item provided for ListOfFiles slot');
 		}
 	}
 
