@@ -7,6 +7,7 @@ declare(strict_types=1);
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+use OC\NavigationManager;
 use OC\Profiler\BuiltInProfiler;
 use OC\Security\CSP\ContentSecurityPolicyNonceManager;
 use OC\Share20\GroupDeletedListener;
@@ -1203,6 +1204,8 @@ class OC {
 		}
 
 		// All apps are now loaded to handle the request
+		Server::get(NavigationManager::class)->setup();
+
 		// if we are not on CLI, try to match the request to a route and handle it
 		if (!self::$CLI) {
 			try {
