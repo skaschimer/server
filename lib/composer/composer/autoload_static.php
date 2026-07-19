@@ -1628,6 +1628,7 @@ class ComposerStaticInit749170dad3f5e7f9ca158f5a9f04f6a2
         'OC\\Core\\Listener\\BeforeMessageLoggedEventListener' => __DIR__ . '/../../..' . '/core/Listener/BeforeMessageLoggedEventListener.php',
         'OC\\Core\\Listener\\BeforeTemplateRenderedListener' => __DIR__ . '/../../..' . '/core/Listener/BeforeTemplateRenderedListener.php',
         'OC\\Core\\Listener\\FeedBackHandler' => __DIR__ . '/../../..' . '/core/Listener/FeedBackHandler.php',
+        'OC\\Core\\Listener\\LoadAdditionalEntriesListener' => __DIR__ . '/../../..' . '/core/Listener/LoadAdditionalEntriesListener.php',
         'OC\\Core\\Listener\\PasswordUpdatedListener' => __DIR__ . '/../../..' . '/core/Listener/PasswordUpdatedListener.php',
         'OC\\Core\\Listener\\RestrictInteractionListener' => __DIR__ . '/../../..' . '/core/Listener/RestrictInteractionListener.php',
         'OC\\Core\\Middleware\\TwoFactorMiddleware' => __DIR__ . '/../../..' . '/core/Middleware/TwoFactorMiddleware.php',
