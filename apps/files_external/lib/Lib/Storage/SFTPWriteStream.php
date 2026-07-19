@@ -13,6 +13,8 @@ use Icewind\Streams\File;
 use phpseclib3\Net\SSH2;
 
 class SFTPWriteStream implements File {
+	use SFTPReflection;
+
 	/** @var resource */
 	public $context;
 
@@ -70,7 +72,7 @@ class SFTPWriteStream implements File {
 
 		$this->loadContext('sftp');
 
-		if (!($this->sftp->bitmap & SSH2::MASK_LOGIN)) {
+		if (!($this->getSftpProperty($this->sftp, 'bitmap') & SSH2::MASK_LOGIN)) {
 			return false;
 		}
 
@@ -82,17 +84,19 @@ class SFTPWriteStream implements File {
 		}
 
 		$packet = pack('Na*N2', strlen($remote_file), $remote_file, NET_SFTP_OPEN_WRITE | NET_SFTP_OPEN_CREATE | NET_SFTP_OPEN_TRUNCATE, 0);
-		if (!$this->sftp->_send_sftp_packet(NET_SFTP_OPEN, $packet)) {
+		try {
+			$this->invokeSftp($this->sftp, 'send_sftp_packet', [NET_SFTP_OPEN, $packet]);
+		} catch (\Throwable) {
 			return false;
 		}
 
-		$response = $this->sftp->_get_sftp_packet();
-		switch ($this->sftp->packet_type) {
+		$response = $this->invokeSftp($this->sftp, 'get_sftp_packet');
+		switch ($this->getSftpProperty($this->sftp, 'packet_type')) {
 			case NET_SFTP_HANDLE:
 				$this->handle = substr($response, 4);
 				break;
 			case NET_SFTP_STATUS: // presumably SSH_FX_NO_SUCH_FILE or SSH_FX_PERMISSION_DENIED
-				$this->sftp->_logError($response);
+				$this->invokeSftp($this->sftp, 'logError', [$response]);
 				return false;
 			default:
 				user_error('Expected SSH_FXP_HANDLE or SSH_FXP_STATUS');
@@ -157,13 +161,15 @@ class SFTPWriteStream implements File {
 	public function stream_flush() {
 		$size = strlen($this->buffer);
 		$packet = pack('Na*N3a*', strlen($this->handle), $this->handle, $this->internalPosition / 4294967296, $this->internalPosition, $size, $this->buffer);
-		if (!$this->sftp->_send_sftp_packet(NET_SFTP_WRITE, $packet)) {
+		try {
+			$this->invokeSftp($this->sftp, 'send_sftp_packet', [NET_SFTP_WRITE, $packet]);
+		} catch (\Throwable) {
 			return false;
 		}
 		$this->internalPosition += $size;
 		$this->buffer = '';
 
-		return $this->sftp->_read_put_responses(1);
+		return $this->invokeSftp($this->sftp, 'read_put_responses', [1]);
 	}
 
 	#[\Override]
@@ -174,7 +180,7 @@ class SFTPWriteStream implements File {
 	#[\Override]
 	public function stream_close() {
 		$this->stream_flush();
-		if (!$this->sftp->_close_handle($this->handle)) {
+		if (!$this->invokeSftp($this->sftp, 'close_handle', [$this->handle])) {
 			return false;
 		}
 		$this->sftp->touch($this->path, time(), time());
