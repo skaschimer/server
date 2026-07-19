@@ -158,6 +158,7 @@ return array(
     'OCP\\App\\Events\\AppDisableEvent' => $baseDir . '/lib/public/App/Events/AppDisableEvent.php',
     'OCP\\App\\Events\\AppEnableEvent' => $baseDir . '/lib/public/App/Events/AppEnableEvent.php',
     'OCP\\App\\Events\\AppUpdateEvent' => $baseDir . '/lib/public/App/Events/AppUpdateEvent.php',
+    'OCP\\App\\Events\\AppsLoadedEvent' => $baseDir . '/lib/public/App/Events/AppsLoadedEvent.php',
     'OCP\\App\\IAppManager' => $baseDir . '/lib/public/App/IAppManager.php',
     'OCP\\App\\ManagerEvent' => $baseDir . '/lib/public/App/ManagerEvent.php',
     'OCP\\Authentication\\Events\\AnyLoginFailedEvent' => $baseDir . '/lib/public/Authentication/Events/AnyLoginFailedEvent.php',

@@ -15,6 +15,7 @@ use OC\Share20\Hooks;
 use OC\Share20\UserDeletedListener;
 use OC\Share20\UserRemovedListener;
 use OC\User\DisabledUserException;
+use OCP\App\Events\AppsLoadedEvent;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\Events\BeforeFileSystemSetupEvent;
 use OCP\Group\Events\GroupDeletedEvent;
@@ -1205,6 +1206,7 @@ class OC {
 
 		// All apps are now loaded to handle the request
 		Server::get(NavigationManager::class)->setup();
+		Server::get(IEventDispatcher::class)->dispatchTyped(new AppsLoadedEvent());
 
 		// if we are not on CLI, try to match the request to a route and handle it
 		if (!self::$CLI) {

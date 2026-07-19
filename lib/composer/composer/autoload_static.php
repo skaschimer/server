@@ -199,6 +199,7 @@ class ComposerStaticInit749170dad3f5e7f9ca158f5a9f04f6a2
         'OCP\\App\\Events\\AppDisableEvent' => __DIR__ . '/../../..' . '/lib/public/App/Events/AppDisableEvent.php',
         'OCP\\App\\Events\\AppEnableEvent' => __DIR__ . '/../../..' . '/lib/public/App/Events/AppEnableEvent.php',
         'OCP\\App\\Events\\AppUpdateEvent' => __DIR__ . '/../../..' . '/lib/public/App/Events/AppUpdateEvent.php',
+        'OCP\\App\\Events\\AppsLoadedEvent' => __DIR__ . '/../../..' . '/lib/public/App/Events/AppsLoadedEvent.php',
         'OCP\\App\\IAppManager' => __DIR__ . '/../../..' . '/lib/public/App/IAppManager.php',
         'OCP\\App\\ManagerEvent' => __DIR__ . '/../../..' . '/lib/public/App/ManagerEvent.php',
         'OCP\\Authentication\\Events\\AnyLoginFailedEvent' => __DIR__ . '/../../..' . '/lib/public/Authentication/Events/AnyLoginFailedEvent.php',
