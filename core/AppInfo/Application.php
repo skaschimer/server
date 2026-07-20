@@ -118,13 +118,13 @@ class Application extends App implements IBootstrap {
 
 		$registry = Server::get(ISharingRegistry::class);
 
-		$registry->registerRecipientType(new EmailShareRecipientType());
+		$registry->registerRecipientType(Server::get(EmailShareRecipientType::class));
 		$registry->registerRecipientType(Server::get(GroupShareRecipientType::class));
 		$registry->registerRecipientType(Server::get(TeamShareRecipientType::class));
-		$registry->registerRecipientType(new TokenShareRecipientType());
+		$registry->registerRecipientType(Server::get(TokenShareRecipientType::class));
 		$registry->registerRecipientType(Server::get(UserShareRecipientType::class));
 
-		$registry->registerPropertyType(new ExpirationDateSharePropertyType());
+		$registry->registerPropertyType(Server::get(ExpirationDateSharePropertyType::class));
 		$registry->markPropertyTypeCompatibleWithRecipientType(ExpirationDateSharePropertyType::class, EmailShareRecipientType::class);
 		$registry->markPropertyTypeCompatibleWithRecipientType(ExpirationDateSharePropertyType::class, GroupShareRecipientType::class);
 		$registry->markPropertyTypeCompatibleWithRecipientType(ExpirationDateSharePropertyType::class, TeamShareRecipientType::class);
@@ -141,14 +141,14 @@ class Application extends App implements IBootstrap {
 		$registry->markPropertyTypeCompatibleWithRecipientType(NoteSharePropertyType::class, TokenShareRecipientType::class);
 		$registry->markPropertyTypeCompatibleWithRecipientType(NoteSharePropertyType::class, UserShareRecipientType::class);
 
-		$registry->registerPropertyType(new PasswordSharePropertyType());
+		$registry->registerPropertyType(Server::get(PasswordSharePropertyType::class));
 		$registry->markPropertyTypeCompatibleWithRecipientType(PasswordSharePropertyType::class, EmailShareRecipientType::class);
 		$registry->markPropertyTypeCompatibleWithRecipientType(PasswordSharePropertyType::class, TokenShareRecipientType::class);
 
 		$registry->registerPermissionPreset(new ViewSharePermissionPreset());
 		$registry->registerPermissionPreset(new EditSharePermissionPreset());
 
-		$registry->registerPermissionType(null, new ReshareSharePermissionType());
+		$registry->registerPermissionType(null, Server::get(ReshareSharePermissionType::class));
 		// Cannot use the APP_ID from files_sharing Application and EXCLUDE_RESHARE_FROM_EDIT from files_sharing ConfigLexicon, because the classes are not registered yet.
 		if (!Server::get(IAppConfig::class)->getValueBool('files_sharing', 'shareapi_exclude_reshare_from_edit')) {
 			$registry->markPermissionTypeCompatibleWithPermissionPreset(ReshareSharePermissionType::class, EditSharePermissionPreset::class);

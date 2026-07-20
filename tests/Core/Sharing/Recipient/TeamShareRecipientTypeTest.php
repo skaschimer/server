@@ -98,7 +98,7 @@ final class TeamShareRecipientTypeTest extends TestCase {
 		$this->team2 = $this->createTeam($teamManager, 'team2');
 		$this->team3 = $this->createTeam($teamManager, 'team3');
 
-		$this->recipientType = new TeamShareRecipientType(Server::get(IEventDispatcher::class), $this->dbConnection, $this->manager);
+		$this->recipientType = new TeamShareRecipientType(Server::get(IEventDispatcher::class), $this->dbConnection, $teamManager, $this->manager);
 	}
 
 	#[\Override]

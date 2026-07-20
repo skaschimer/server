@@ -72,7 +72,7 @@ final class UserShareRecipientTypeTest extends TestCase {
 		$this->user3 = $this->createUser($userManager, 'user3', 'password');
 		$this->user4 = $this->createUser($userManager, 'user4', 'password');
 
-		$this->recipientType = new UserShareRecipientType(Server::get(IEventDispatcher::class), $this->dbConnection, $this->manager);
+		$this->recipientType = new UserShareRecipientType(Server::get(IEventDispatcher::class), $this->dbConnection, $userManager, $this->manager);
 	}
 
 	#[\Override]

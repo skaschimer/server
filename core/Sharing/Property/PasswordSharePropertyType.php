@@ -12,7 +12,6 @@ namespace OC\Core\Sharing\Property;
 use OC\Core\AppInfo\Application;
 use OCP\L10N\IFactory;
 use OCP\Security\IHasher;
-use OCP\Server;
 use OCP\Share\IManager;
 use OCP\Sharing\Property\APasswordSharePropertyType;
 use OCP\Sharing\Property\ISharePropertyTypeFilter;
@@ -20,16 +19,11 @@ use OCP\Sharing\Share;
 use OCP\Sharing\ShareAccessContext;
 
 final class PasswordSharePropertyType extends APasswordSharePropertyType implements ISharePropertyTypeFilter {
-	private ?IManager $legacyManager = null;
 
-	private ?IHasher $hasher = null;
-
-	private function getLegacyManager(): IManager {
-		return $this->legacyManager ??= Server::get(IManager::class);
-	}
-
-	private function getHasher(): IHasher {
-		return $this->hasher ??= Server::get(IHasher::class);
+	public function __construct(
+		private readonly IManager $legacyManager,
+		private readonly IHasher $hasher,
+	) {
 	}
 
 	#[\Override]
@@ -55,7 +49,7 @@ final class PasswordSharePropertyType extends APasswordSharePropertyType impleme
 	#[\Override]
 	public function isRequired(): bool {
 		// TODO: Enable group memberships check based on the owner.
-		return $this->getLegacyManager()->shareApiLinkEnforcePassword(false);
+		return $this->legacyManager->shareApiLinkEnforcePassword(false);
 	}
 
 	#[\Override]
@@ -72,7 +66,7 @@ final class PasswordSharePropertyType extends APasswordSharePropertyType impleme
 
 		if (($property = $share->properties[self::class] ?? null) !== null && $property->value !== null) {
 			// TODO: Check if the hash has to be updated and save it.
-			return !$this->getHasher()->verify($argument, $property->value);
+			return !$this->hasher->verify($argument, $property->value);
 		}
 
 		return false;

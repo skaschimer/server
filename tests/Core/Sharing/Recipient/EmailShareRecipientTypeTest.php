@@ -46,7 +46,7 @@ final class EmailShareRecipientTypeTest extends TestCase {
 
 		self::loginAsUser($this->user1->getUID());
 
-		$this->recipientType = new EmailShareRecipientType();
+		$this->recipientType = Server::get(EmailShareRecipientType::class);
 	}
 
 	#[\Override]

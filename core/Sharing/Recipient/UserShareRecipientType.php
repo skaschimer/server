@@ -20,7 +20,6 @@ use OCP\Interaction\Receivers\UserReceiver;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\L10N\IFactory;
-use OCP\Server;
 use OCP\Share\IShare;
 use OCP\Sharing\Icon\ShareIconURL;
 use OCP\Sharing\ISharingManager;
@@ -33,18 +32,14 @@ use OCP\User\Events\UserDeletedEvent;
  * @template-implements IEventListener<UserDeletedEvent>
  */
 final class UserShareRecipientType extends AShareRecipientTypeSearchCollaborator implements IEventListener {
-	private ?IUserManager $userManager = null;
 
 	public function __construct(
 		IEventDispatcher $eventDispatcher,
 		private readonly IDBConnection $dbConnection,
+		private readonly IUserManager $userManager,
 		private readonly ISharingManager $manager,
 	) {
 		$eventDispatcher->addServiceListener(UserDeletedEvent::class, self::class);
-	}
-
-	private function getUserManager(): IUserManager {
-		return $this->userManager ??= Server::get(IUserManager::class);
 	}
 
 	#[\Override]
@@ -54,7 +49,7 @@ final class UserShareRecipientType extends AShareRecipientTypeSearchCollaborator
 
 	#[\Override]
 	public function validateRecipient(string $recipient): bool {
-		return $this->getUserManager()->userExists($recipient);
+		return $this->userManager->userExists($recipient);
 	}
 
 	#[\Override]
@@ -68,14 +63,14 @@ final class UserShareRecipientType extends AShareRecipientTypeSearchCollaborator
 
 	#[\Override]
 	public function getRecipientDisplayName(string $recipient): ?string {
-		return $this->getUserManager()->getDisplayName($recipient);
+		return $this->userManager->getDisplayName($recipient);
 	}
 
 	#[\Override]
 	public function getRecipientIcon(string $recipient): ShareIconURL {
 		return new ShareIconURL(
-			$this->getUserManager()->getAvatarUrlLight($recipient, 64),
-			$this->getUserManager()->getAvatarUrlDark($recipient, 64),
+			$this->userManager->getAvatarUrlLight($recipient, 64),
+			$this->userManager->getAvatarUrlDark($recipient, 64),
 		);
 	}
 

@@ -13,14 +13,12 @@ use OC\Core\AppInfo\Application;
 use OCP\Constants;
 use OCP\IAppConfig;
 use OCP\L10N\IFactory;
-use OCP\Server;
 use OCP\Sharing\Permission\ISharePermissionType;
 
-final class ReshareSharePermissionType implements ISharePermissionType {
-	private ?IAppConfig $appConfig = null;
-
-	private function getAppConfig(): IAppConfig {
-		return $this->appConfig ??= Server::get(IAppConfig::class);
+final readonly class ReshareSharePermissionType implements ISharePermissionType {
+	public function __construct(
+		private IAppConfig $appConfig,
+	) {
 	}
 
 	#[\Override]
@@ -40,6 +38,6 @@ final class ReshareSharePermissionType implements ISharePermissionType {
 
 	#[\Override]
 	public function isEnabledByDefault(): bool {
-		return ($this->getAppConfig()->getValueInt(Application::APP_ID, 'shareapi_default_permissions') & Constants::PERMISSION_SHARE) === Constants::PERMISSION_SHARE;
+		return ($this->appConfig->getValueInt(Application::APP_ID, 'shareapi_default_permissions') & Constants::PERMISSION_SHARE) === Constants::PERMISSION_SHARE;
 	}
 }

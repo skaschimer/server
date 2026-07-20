@@ -14,7 +14,6 @@ use DateTimeImmutable;
 use DateTimeInterface;
 use OC\Core\AppInfo\Application;
 use OCP\L10N\IFactory;
-use OCP\Server;
 use OCP\Share\IManager;
 use OCP\Sharing\Property\ADateSharePropertyType;
 use OCP\Sharing\Property\ISharePropertyTypeFilter;
@@ -26,13 +25,9 @@ use RuntimeException;
 final class ExpirationDateSharePropertyType extends ADateSharePropertyType implements ISharePropertyTypeFilter {
 	private readonly DateTimeImmutable $now;
 
-	private ?IManager $legacyManager = null;
-
-	private function getLegacyManager(): IManager {
-		return $this->legacyManager ??= Server::get(IManager::class);
-	}
-
-	public function __construct() {
+	public function __construct(
+		private readonly IManager $legacyManager,
+	) {
 		$this->now = new DateTimeImmutable();
 	}
 
@@ -58,15 +53,15 @@ final class ExpirationDateSharePropertyType extends ADateSharePropertyType imple
 
 	#[\Override]
 	public function isRequired(): bool {
-		if ($this->getLegacyManager()->shareApiLinkDefaultExpireDateEnforced()) {
+		if ($this->legacyManager->shareApiLinkDefaultExpireDateEnforced()) {
 			return true;
 		}
 
-		if ($this->getLegacyManager()->shareApiRemoteDefaultExpireDateEnforced()) {
+		if ($this->legacyManager->shareApiRemoteDefaultExpireDateEnforced()) {
 			return true;
 		}
 
-		return $this->getLegacyManager()->shareApiInternalDefaultExpireDateEnforced();
+		return $this->legacyManager->shareApiInternalDefaultExpireDateEnforced();
 	}
 
 	#[\Override]
@@ -93,16 +88,16 @@ final class ExpirationDateSharePropertyType extends ADateSharePropertyType imple
 	private function getMaxExpirationDate(): ?DateTimeImmutable {
 		// We do not have any distinction between link/remote/internal, so we just apply the lowest expiration days count to be safe.
 		$days = INF;
-		if ($this->getLegacyManager()->shareApiLinkDefaultExpireDate()) {
-			$days = min($days, $this->getLegacyManager()->shareApiLinkDefaultExpireDays());
+		if ($this->legacyManager->shareApiLinkDefaultExpireDate()) {
+			$days = min($days, $this->legacyManager->shareApiLinkDefaultExpireDays());
 		}
 
-		if ($this->getLegacyManager()->shareApiRemoteDefaultExpireDate()) {
-			$days = min($days, $this->getLegacyManager()->shareApiRemoteDefaultExpireDays());
+		if ($this->legacyManager->shareApiRemoteDefaultExpireDate()) {
+			$days = min($days, $this->legacyManager->shareApiRemoteDefaultExpireDays());
 		}
 
-		if ($this->getLegacyManager()->shareApiInternalDefaultExpireDate()) {
-			$days = min($days, $this->getLegacyManager()->shareApiInternalDefaultExpireDays());
+		if ($this->legacyManager->shareApiInternalDefaultExpireDate()) {
+			$days = min($days, $this->legacyManager->shareApiInternalDefaultExpireDays());
 		}
 
 		if ($days !== INF) {
