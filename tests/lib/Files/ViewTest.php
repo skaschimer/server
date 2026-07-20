@@ -493,13 +493,13 @@ class ViewTest extends \Test\TestCase {
 		$this->assertSame(
 			1,
 			$rootEntryAfter->getMTime(),
-			'Root folder mtime must not change when the watcher finds no metadata change'
+			'Root folder mtime must not change when the watcher finds no metadata change',
 		);
 		$this->assertSame(
 			'unchanged-root-etag',
 			$rootEntryAfter->getEtag(),
-			'Root folder etag must not change when the watcher finds no metadata change'
- 		);
+			'Root folder etag must not change when the watcher finds no metadata change',
+		);
 	}
 
 	public function testCopyBetweenStorageNoCross(): void {
