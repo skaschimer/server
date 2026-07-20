@@ -116,20 +116,20 @@ class Application extends App implements IBootstrap {
 		$registry->markPropertyTypeCompatibleWithSourceType(NodeGridViewSharePropertyType::class, NodeShareSourceType::class);
 		$registry->markPropertyTypeCompatibleWithRecipientType(NodeGridViewSharePropertyType::class, TokenShareRecipientType::class);
 
-		$registry->registerPermissionType(NodeShareSourceType::class, new NodeCreateSharePermissionType());
+		$registry->registerPermissionType(NodeShareSourceType::class, Server::get(NodeCreateSharePermissionType::class));
 		$registry->markPermissionTypeCompatibleWithPermissionPreset(NodeCreateSharePermissionType::class, EditSharePermissionPreset::class);
 
 		$registry->registerPermissionType(NodeShareSourceType::class, new NodeReadSharePermissionType());
 		$registry->markPermissionTypeCompatibleWithPermissionPreset(NodeReadSharePermissionType::class, ViewSharePermissionPreset::class);
 		$registry->markPermissionTypeCompatibleWithPermissionPreset(NodeReadSharePermissionType::class, EditSharePermissionPreset::class);
 
-		$registry->registerPermissionType(NodeShareSourceType::class, new NodeUpdateSharePermissionType());
+		$registry->registerPermissionType(NodeShareSourceType::class, Server::get(NodeUpdateSharePermissionType::class));
 		$registry->markPermissionTypeCompatibleWithPermissionPreset(NodeUpdateSharePermissionType::class, EditSharePermissionPreset::class);
 
-		$registry->registerPermissionType(NodeShareSourceType::class, new NodeDeleteSharePermissionType());
+		$registry->registerPermissionType(NodeShareSourceType::class, Server::get(NodeDeleteSharePermissionType::class));
 		$registry->markPermissionTypeCompatibleWithPermissionPreset(NodeDeleteSharePermissionType::class, EditSharePermissionPreset::class);
 
-		$registry->registerPermissionType(NodeShareSourceType::class, new NodeDownloadSharePermissionType());
+		$registry->registerPermissionType(NodeShareSourceType::class, Server::get(NodeDownloadSharePermissionType::class));
 		$registry->markPermissionTypeCompatibleWithPermissionPreset(NodeDownloadSharePermissionType::class, ViewSharePermissionPreset::class);
 		$registry->markPermissionTypeCompatibleWithPermissionPreset(NodeDownloadSharePermissionType::class, EditSharePermissionPreset::class);
 	}

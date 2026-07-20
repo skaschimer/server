@@ -13,14 +13,12 @@ use OCA\Files\AppInfo\Application;
 use OCP\Constants;
 use OCP\IAppConfig;
 use OCP\L10N\IFactory;
-use OCP\Server;
 use OCP\Sharing\Permission\ISharePermissionType;
 
-final class NodeCreateSharePermissionType implements ISharePermissionType {
-	private ?IAppConfig $appConfig = null;
-
-	private function getAppConfig(): IAppConfig {
-		return $this->appConfig ??= Server::get(IAppConfig::class);
+final readonly class NodeCreateSharePermissionType implements ISharePermissionType {
+	public function __construct(
+		private IAppConfig $appConfig,
+	) {
 	}
 
 	#[\Override]
@@ -40,6 +38,6 @@ final class NodeCreateSharePermissionType implements ISharePermissionType {
 
 	#[\Override]
 	public function isEnabledByDefault(): bool {
-		return ($this->getAppConfig()->getValueInt(\OC\Core\AppInfo\Application::APP_ID, 'shareapi_default_permissions') & Constants::PERMISSION_CREATE) === Constants::PERMISSION_CREATE;
+		return ($this->appConfig->getValueInt(\OC\Core\AppInfo\Application::APP_ID, 'shareapi_default_permissions') & Constants::PERMISSION_CREATE) === Constants::PERMISSION_CREATE;
 	}
 }
