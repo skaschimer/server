@@ -46,15 +46,20 @@ final readonly class ShareUser {
 	 * @since 35.0.0
 	 */
 	public function format(IUserManager $userManager): array {
-		$ownerUser = $userManager->get($this->userId);
-		if ($ownerUser === null) {
-			throw new RuntimeException('The userId does not exist: ' . $this->userId);
+		if ($this->instance !== null) {
+			// TODO: Support federation
+			throw new RuntimeException('Currently only local users are supported.');
+		}
+
+		$displayName = $userManager->getDisplayName($this->userId);
+		if ($displayName === null) {
+			throw new RuntimeException('No display name for user ' . $this->userId);
 		}
 
 		return [
 			'user_id' => $this->userId,
 			'instance' => $this->instance,
-			'display_name' => $ownerUser->getDisplayName(),
+			'display_name' => $displayName,
 			'icon' => (new ShareIconURL(
 				$userManager->getAvatarUrlLight($this->userId, 64),
 				$userManager->getAvatarUrlDark($this->userId, 64),

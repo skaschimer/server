@@ -52,6 +52,11 @@ final readonly class ShareRecipient {
 			throw new RuntimeException('The recipient type is not registered: ' . $this->class);
 		}
 
+		if ($this->instance !== null) {
+			// TODO: Support federation
+			throw new RuntimeException('Currently only local recipients are supported.');
+		}
+
 		$displayName = $recipientType->getRecipientDisplayName($this->value) ?? $this->value;
 		if (!$isUnique) {
 			$displayName .= ' (' . $recipientType->getDisplayName($l10nFactory) . ': ' . $this->value . ')';
