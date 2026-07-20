@@ -46,6 +46,11 @@ final readonly class ShareUser {
 	 * @since 35.0.0
 	 */
 	public function format(IUserManager $userManager): array {
+		if ($this->instance !== null) {
+			// TODO: Support federation
+			throw new RuntimeException('Currently only local users are supported.');
+		}
+
 		$ownerUser = $userManager->get($this->userId);
 		if ($ownerUser === null) {
 			throw new RuntimeException('The userId does not exist: ' . $this->userId);
