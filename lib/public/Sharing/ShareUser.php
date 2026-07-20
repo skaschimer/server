@@ -51,15 +51,15 @@ final readonly class ShareUser {
 			throw new RuntimeException('Currently only local users are supported.');
 		}
 
-		$ownerUser = $userManager->get($this->userId);
-		if ($ownerUser === null) {
-			throw new RuntimeException('The userId does not exist: ' . $this->userId);
+		$displayName = $userManager->getDisplayName($this->userId);
+		if ($displayName === null) {
+			throw new RuntimeException('No display name for user ' . $this->userId);
 		}
 
 		return [
 			'user_id' => $this->userId,
 			'instance' => $this->instance,
-			'display_name' => $ownerUser->getDisplayName(),
+			'display_name' => $displayName,
 			'icon' => (new ShareIconURL(
 				$userManager->getAvatarUrlLight($this->userId, 64),
 				$userManager->getAvatarUrlDark($this->userId, 64),
