@@ -831,7 +831,7 @@ final readonly class SharingBackend implements ISharingBackend {
 						->values([
 							'share_id' => $qb->createNamedParameter($id),
 							'property_class' => $qb->createNamedParameter($propertyTypeClass),
-							'property_value' => $qb->createNamedParameter($value),
+							'property_value' => $qb->createNamedParameter($propertyType instanceof ISharePropertyTypeModifyValue ? $propertyType->modifyValueOnSave(null, $value) : $value),
 						])
 						->executeStatement();
 
