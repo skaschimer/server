@@ -10,20 +10,29 @@ declare(strict_types=1);
 namespace OC\Core\Sharing\Property;
 
 use OC\Core\AppInfo\Application;
+use OCP\EventDispatcher\IEventDispatcher;
 use OCP\L10N\IFactory;
+use OCP\Security\Events\GenerateSecurePasswordEvent;
 use OCP\Security\IHasher;
+use OCP\Security\ISecureRandom;
+use OCP\Security\PasswordContext;
 use OCP\Share\IManager;
 use OCP\Sharing\Property\APasswordSharePropertyType;
 use OCP\Sharing\Property\ISharePropertyTypeFilter;
 use OCP\Sharing\Share;
 use OCP\Sharing\ShareAccessContext;
+use Random\Randomizer;
 
 final class PasswordSharePropertyType extends APasswordSharePropertyType implements ISharePropertyTypeFilter {
+
+	private readonly Randomizer $randomizer;
 
 	public function __construct(
 		private readonly IManager $legacyManager,
 		private readonly IHasher $hasher,
+		private readonly IEventDispatcher $eventDispatcher,
 	) {
+		$this->randomizer = new Randomizer();
 	}
 
 	#[\Override]
@@ -54,7 +63,13 @@ final class PasswordSharePropertyType extends APasswordSharePropertyType impleme
 
 	#[\Override]
 	public function getDefaultValue(): ?string {
-		return null;
+		if (!$this->isRequired()) {
+			return null;
+		}
+
+		$event = new GenerateSecurePasswordEvent(PasswordContext::SHARING);
+		$this->eventDispatcher->dispatchTyped($event);
+		return $event->getPassword() ?? $this->randomizer->getBytesFromString(ISecureRandom::CHAR_ALPHANUMERIC, 20);
 	}
 
 	#[\Override]
