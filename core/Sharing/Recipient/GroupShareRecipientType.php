@@ -21,7 +21,6 @@ use OCP\Interaction\InteractionReceiver;
 use OCP\Interaction\Receivers\GroupReceiver;
 use OCP\IUser;
 use OCP\L10N\IFactory;
-use OCP\Server;
 use OCP\Share\IShare;
 use OCP\Sharing\Icon\ShareIconSVG;
 use OCP\Sharing\Icon\ShareIconURL;
@@ -34,18 +33,13 @@ use OCP\Sharing\ShareAccessContext;
  * @template-implements IEventListener<GroupDeletedEvent>
  */
 final class GroupShareRecipientType extends AShareRecipientTypeSearchCollaborator implements IEventListener {
-	private ?IGroupManager $groupManager = null;
-
 	public function __construct(
 		IEventDispatcher $eventDispatcher,
 		private readonly IDBConnection $dbConnection,
+		private readonly IGroupManager $groupManager,
 		private readonly ISharingManager $manager,
 	) {
 		$eventDispatcher->addServiceListener(GroupDeletedEvent::class, self::class);
-	}
-
-	private function getGroupManager(): IGroupManager {
-		return $this->groupManager ??= Server::get(IGroupManager::class);
 	}
 
 	#[\Override]
@@ -55,7 +49,7 @@ final class GroupShareRecipientType extends AShareRecipientTypeSearchCollaborato
 
 	#[\Override]
 	public function validateRecipient(string $recipient): bool {
-		return $this->getGroupManager()->groupExists($recipient);
+		return $this->groupManager->groupExists($recipient);
 	}
 
 	#[\Override]
@@ -64,12 +58,12 @@ final class GroupShareRecipientType extends AShareRecipientTypeSearchCollaborato
 			return [];
 		}
 
-		return $this->getGroupManager()->getUserGroupIds($currentUser);
+		return $this->groupManager->getUserGroupIds($currentUser);
 	}
 
 	#[\Override]
 	public function getRecipientDisplayName(string $recipient): ?string {
-		$displayName = $this->getGroupManager()->getDisplayName($recipient);
+		$displayName = $this->groupManager->getDisplayName($recipient);
 		if ($displayName === '') {
 			return null;
 		}

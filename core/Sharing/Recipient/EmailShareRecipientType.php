@@ -15,7 +15,6 @@ use OCP\Interaction\Receivers\EmailReceiver;
 use OCP\IUser;
 use OCP\L10N\IFactory;
 use OCP\Mail\IEmailValidator;
-use OCP\Server;
 use OCP\Share\IShare;
 use OCP\Sharing\Icon\ShareIconSVG;
 use OCP\Sharing\Icon\ShareIconURL;
@@ -24,10 +23,9 @@ use OCP\Sharing\Recipient\AShareRecipientTypeSearchCollaborator;
 // TODO: Add logic to send emails when share state is updated to active
 
 final class EmailShareRecipientType extends AShareRecipientTypeSearchCollaborator {
-	private ?IEmailValidator $emailValidator = null;
-
-	private function getEmailValidator(): IEmailValidator {
-		return $this->emailValidator ??= Server::get(IEmailValidator::class);
+	public function __construct(
+		private readonly IEmailValidator $emailValidator,
+	) {
 	}
 
 	#[\Override]
@@ -37,7 +35,7 @@ final class EmailShareRecipientType extends AShareRecipientTypeSearchCollaborato
 
 	#[\Override]
 	public function validateRecipient(string $recipient): bool {
-		return $this->getEmailValidator()->isValid($recipient);
+		return $this->emailValidator->isValid($recipient);
 	}
 
 	#[\Override]

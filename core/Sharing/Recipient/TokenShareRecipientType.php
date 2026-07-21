@@ -14,7 +14,6 @@ use OCP\Interaction\InteractionReceiver;
 use OCP\Interaction\Receivers\LinkReceiver;
 use OCP\IUser;
 use OCP\L10N\IFactory;
-use OCP\Server;
 use OCP\Share\IManager;
 use OCP\Sharing\Icon\ShareIconSVG;
 use OCP\Sharing\Icon\ShareIconURL;
@@ -22,11 +21,10 @@ use OCP\Sharing\Recipient\IShareRecipientType;
 use OCP\Sharing\Recipient\IShareRecipientTypePublicSecret;
 
 // TODO: Rename to Link?
-final class TokenShareRecipientType implements IShareRecipientType, IShareRecipientTypePublicSecret {
-	private ?IManager $legacyManager = null;
-
-	private function getLegacyManager(): IManager {
-		return $this->legacyManager ??= Server::get(IManager::class);
+final readonly class TokenShareRecipientType implements IShareRecipientType, IShareRecipientTypePublicSecret {
+	public function __construct(
+		private IManager $legacyManager,
+	) {
 	}
 
 	#[\Override]
@@ -66,6 +64,6 @@ final class TokenShareRecipientType implements IShareRecipientType, IShareRecipi
 
 	#[\Override]
 	public function isSecretUpdatable(string $recipient): bool {
-		return $this->getLegacyManager()->allowCustomTokens();
+		return $this->legacyManager->allowCustomTokens();
 	}
 }

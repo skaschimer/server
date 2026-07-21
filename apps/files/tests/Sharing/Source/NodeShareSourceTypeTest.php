@@ -15,6 +15,7 @@ use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\IDBConnection;
+use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\Server;
@@ -56,7 +57,7 @@ final class NodeShareSourceTypeTest extends TestCase {
 		$userFolder = Server::get(IRootFolder::class)->getUserFolder($this->user1->getUID());
 		$this->node = $userFolder->newFile('foo.txt', 'bar');
 
-		$this->sourceType = new NodeShareSourceType(Server::get(IEventDispatcher::class), $this->dbConnection, $this->manager);
+		$this->sourceType = new NodeShareSourceType(Server::get(IEventDispatcher::class), $this->dbConnection, Server::get(IRootFolder::class), Server::get(IURLGenerator::class), $this->manager);
 	}
 
 	#[\Override]

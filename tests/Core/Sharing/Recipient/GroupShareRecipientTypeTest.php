@@ -82,7 +82,7 @@ final class GroupShareRecipientTypeTest extends TestCase {
 
 		$this->group1->addUser($this->user1);
 
-		$this->recipientType = new GroupShareRecipientType(Server::get(IEventDispatcher::class), $this->dbConnection, $this->manager);
+		$this->recipientType = new GroupShareRecipientType(Server::get(IEventDispatcher::class), $this->dbConnection, $groupManager, $this->manager);
 	}
 
 	#[\Override]

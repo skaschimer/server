@@ -41,7 +41,7 @@ final class ExpirationDateSharePropertyTypeTest extends TestCase {
 		$this->assertNotFalse($user);
 		$this->user = $user;
 
-		$this->propertyType = new ExpirationDateSharePropertyType();
+		$this->propertyType = Server::get(ExpirationDateSharePropertyType::class);
 	}
 
 	#[\Override]

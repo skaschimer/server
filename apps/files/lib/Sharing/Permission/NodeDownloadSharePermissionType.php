@@ -11,15 +11,13 @@ namespace OCA\Files\Sharing\Permission;
 
 use OCA\Files\AppInfo\Application;
 use OCP\L10N\IFactory;
-use OCP\Server;
 use OCP\Share\IManager;
 use OCP\Sharing\Permission\ISharePermissionType;
 
-final class NodeDownloadSharePermissionType implements ISharePermissionType {
-	private ?IManager $legacyManager = null;
-
-	private function getLegacyManager(): IManager {
-		return $this->legacyManager ??= Server::get(IManager::class);
+final readonly class NodeDownloadSharePermissionType implements ISharePermissionType {
+	public function __construct(
+		private IManager $legacyManager,
+	) {
 	}
 
 	#[\Override]
@@ -30,7 +28,7 @@ final class NodeDownloadSharePermissionType implements ISharePermissionType {
 	#[\Override]
 	public function getHint(IFactory $l10nFactory): ?string {
 		// If previews are still allowed, the download option is only hidden, because on a technical level it is still possible to download.
-		if ($this->getLegacyManager()->allowViewWithoutDownload()) {
+		if ($this->legacyManager->allowViewWithoutDownload()) {
 			return $l10nFactory->get(Application::APP_ID)->t('When disabled, the option to download will be hidden');
 		}
 

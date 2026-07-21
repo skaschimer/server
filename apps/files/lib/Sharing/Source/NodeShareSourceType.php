@@ -23,7 +23,6 @@ use OCP\Interaction\InteractionResource;
 use OCP\Interaction\Resources\NodeResource;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
-use OCP\Server;
 use OCP\Sharing\Icon\ShareIconURL;
 use OCP\Sharing\ISharingManager;
 use OCP\Sharing\ShareAccessContext;
@@ -33,26 +32,16 @@ use OCP\Sharing\Source\ShareSource;
 /**
  * @template-implements IEventListener<NodeDeletedEvent|MoveToTrashEvent>
  */
-final class NodeShareSourceType implements IShareSourceType, IEventListener {
-	private ?IRootFolder $rootFolder = null;
-
-	private ?IURLGenerator $urlGenerator = null;
-
+final readonly class NodeShareSourceType implements IShareSourceType, IEventListener {
 	public function __construct(
 		IEventDispatcher $eventDispatcher,
-		private readonly IDBConnection $dbConnection,
-		private readonly ISharingManager $manager,
+		private IDBConnection $dbConnection,
+		private IRootFolder $rootFolder,
+		private IURLGenerator $urlGenerator,
+		private ISharingManager $manager,
 	) {
 		$eventDispatcher->addServiceListener(NodeDeletedEvent::class, self::class);
 		$eventDispatcher->addServiceListener(MoveToTrashEvent::class, self::class);
-	}
-
-	private function getRootFolder(): IRootFolder {
-		return $this->rootFolder ??= Server::get(IRootFolder::class);
-	}
-
-	private function getUrlGenerator(): IURLGenerator {
-		return $this->urlGenerator ??= Server::get(IURLGenerator::class);
 	}
 
 	#[\Override]
@@ -62,12 +51,12 @@ final class NodeShareSourceType implements IShareSourceType, IEventListener {
 
 	#[\Override]
 	public function validateSource(string $source): bool {
-		return $this->getRootFolder()->getFirstNodeById((int)$source) instanceof Node;
+		return $this->rootFolder->getFirstNodeById((int)$source) instanceof Node;
 	}
 
 	#[\Override]
 	public function getSourceDisplayName(string $source): ?string {
-		$displayName = $this->getRootFolder()->getFirstNodeById((int)$source)?->getName();
+		$displayName = $this->rootFolder->getFirstNodeById((int)$source)?->getName();
 		if ($displayName === '') {
 			return null;
 		}
@@ -77,7 +66,7 @@ final class NodeShareSourceType implements IShareSourceType, IEventListener {
 
 	#[\Override]
 	public function getSourceIcon(string $source): ShareIconURL {
-		$url = $this->getUrlGenerator()->linkToRouteAbsolute('core.Preview.getPreviewByFileId', ['fileId' => $source, 'x' => 64, 'y' => 64]);
+		$url = $this->urlGenerator->linkToRouteAbsolute('core.Preview.getPreviewByFileId', ['fileId' => $source, 'x' => 64, 'y' => 64]);
 
 		return new ShareIconURL($url, $url);
 	}

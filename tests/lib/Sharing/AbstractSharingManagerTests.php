@@ -138,7 +138,7 @@ abstract class AbstractSharingManagerTests extends TestCase {
 		$this->registry->markPermissionTypeCompatibleWithPermissionPreset(TestSharePermissionType1::class, TestSharePermissionPreset2::class);
 		$this->registry->registerPermissionType(TestShareSourceType2::class, new TestSharePermissionType2());
 		$this->registry->markPermissionTypeCompatibleWithPermissionPreset(TestSharePermissionType2::class, TestSharePermissionPreset2::class);
-		$this->registry->registerPermissionType(null, new ReshareSharePermissionType());
+		$this->registry->registerPermissionType(null, Server::get(ReshareSharePermissionType::class));
 	}
 
 	#[\Override]
@@ -2953,7 +2953,7 @@ abstract class AbstractSharingManagerTests extends TestCase {
 			true,
 			false,
 		));
-		$this->registry->registerPermissionType(null, new ReshareSharePermissionType());
+		$this->registry->registerPermissionType(null, Server::get(ReshareSharePermissionType::class));
 
 		$accessContext = new ShareAccessContext($this->owner);
 

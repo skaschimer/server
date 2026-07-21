@@ -36,7 +36,7 @@ final class PasswordSharePropertyTypeTest extends TestCase {
 		$this->assertNotFalse($user);
 		$this->user = $user;
 
-		$this->propertyType = new PasswordSharePropertyType();
+		$this->propertyType = Server::get(PasswordSharePropertyType::class);
 	}
 
 	#[\Override]

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace Tests\Core\Sharing\Recipient;
 
 use OC\Core\Sharing\Recipient\TokenShareRecipientType;
+use OCP\Server;
 use PHPUnit\Framework\Attributes\Group;
 use Test\TestCase;
 
@@ -21,7 +22,7 @@ final class TokenShareRecipientTypeTest extends TestCase {
 	public function setUp(): void {
 		parent::setUp();
 
-		$this->recipientType = new TokenShareRecipientType();
+		$this->recipientType = Server::get(TokenShareRecipientType::class);
 	}
 
 	public function testValidateRecipient(): void {
