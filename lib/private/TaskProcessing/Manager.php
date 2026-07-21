@@ -81,6 +81,8 @@ use OCP\TaskProcessing\TaskTypes\ContextAgentInteraction;
 use OCP\TaskProcessing\TaskTypes\ContextWrite;
 use OCP\TaskProcessing\TaskTypes\GenerateEmoji;
 use OCP\TaskProcessing\TaskTypes\ImageToTextOpticalCharacterRecognition;
+use OCP\TaskProcessing\TaskTypes\MultimodalChatWithTools;
+use OCP\TaskProcessing\TaskTypes\MultimodalContextAgentInteraction;
 use OCP\TaskProcessing\TaskTypes\TextToImage;
 use OCP\TaskProcessing\TaskTypes\TextToSpeech;
 use OCP\TaskProcessing\TaskTypes\TextToText;
@@ -698,6 +700,7 @@ class Manager implements IManager {
 			GenerateEmoji::ID => Server::get(GenerateEmoji::class),
 			TextToTextChangeTone::ID => Server::get(TextToTextChangeTone::class),
 			TextToTextChatWithTools::ID => Server::get(TextToTextChatWithTools::class),
+			MultimodalChatWithTools::ID => Server::get(MultimodalChatWithTools::class),
 			ContextAgentInteraction::ID => Server::get(ContextAgentInteraction::class),
 			TextToTextProofread::ID => Server::get(TextToTextProofread::class),
 			TextToTextReformatParagraphs::ID => Server::get(TextToTextReformatParagraphs::class),
@@ -705,6 +708,7 @@ class Manager implements IManager {
 			AudioToAudioChat::ID => Server::get(AudioToAudioChat::class),
 			AudioToAudioTranslate::ID => Server::get(AudioToAudioTranslate::class),
 			ContextAgentAudioInteraction::ID => Server::get(ContextAgentAudioInteraction::class),
+			MultimodalContextAgentInteraction::ID => Server::get(MultimodalContextAgentInteraction::class),
 			AnalyzeImages::ID => Server::get(AnalyzeImages::class),
 			ImageToTextOpticalCharacterRecognition::ID => Server::get(ImageToTextOpticalCharacterRecognition::class),
 		];

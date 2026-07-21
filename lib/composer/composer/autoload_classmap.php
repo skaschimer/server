@@ -1004,6 +1004,8 @@ return array(
     'OCP\\TaskProcessing\\TaskTypes\\ContextWrite' => $baseDir . '/lib/public/TaskProcessing/TaskTypes/ContextWrite.php',
     'OCP\\TaskProcessing\\TaskTypes\\GenerateEmoji' => $baseDir . '/lib/public/TaskProcessing/TaskTypes/GenerateEmoji.php',
     'OCP\\TaskProcessing\\TaskTypes\\ImageToTextOpticalCharacterRecognition' => $baseDir . '/lib/public/TaskProcessing/TaskTypes/ImageToTextOpticalCharacterRecognition.php',
+    'OCP\\TaskProcessing\\TaskTypes\\MultimodalChatWithTools' => $baseDir . '/lib/public/TaskProcessing/TaskTypes/MultimodalChatWithTools.php',
+    'OCP\\TaskProcessing\\TaskTypes\\MultimodalContextAgentInteraction' => $baseDir . '/lib/public/TaskProcessing/TaskTypes/MultimodalContextAgentInteraction.php',
     'OCP\\TaskProcessing\\TaskTypes\\TextToImage' => $baseDir . '/lib/public/TaskProcessing/TaskTypes/TextToImage.php',
     'OCP\\TaskProcessing\\TaskTypes\\TextToSpeech' => $baseDir . '/lib/public/TaskProcessing/TaskTypes/TextToSpeech.php',
     'OCP\\TaskProcessing\\TaskTypes\\TextToText' => $baseDir . '/lib/public/TaskProcessing/TaskTypes/TextToText.php',
